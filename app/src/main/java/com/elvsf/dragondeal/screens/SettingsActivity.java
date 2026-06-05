@@ -780,11 +780,23 @@ public class SettingsActivity extends AppCompatActivity {
                     return;
                 }
 
-                Toast.makeText(
-                        SettingsActivity.this,
-                        "Код отправлен на новую почту",
-                        Toast.LENGTH_SHORT
-                ).show();
+                MessageResponse body = response.body();
+                String devCode = body != null ? body.getDevCode() : null;
+
+                if (devCode != null) {
+                    dialogBinding.editEmailCode.setText(devCode);
+                    Toast.makeText(
+                            SettingsActivity.this,
+                            "Dev mode: код подставлен автоматически",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                } else {
+                    Toast.makeText(
+                            SettingsActivity.this,
+                            "Код отправлен на новую почту",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                }
             }
 
             @Override
@@ -1028,11 +1040,23 @@ public class SettingsActivity extends AppCompatActivity {
                     return;
                 }
 
-                Toast.makeText(
-                        SettingsActivity.this,
-                        "Код отправлен",
-                        Toast.LENGTH_SHORT
-                ).show();
+                MessageResponse body = response.body();
+                String devCode = body != null ? body.getDevCode() : null;
+
+                if (devCode != null) {
+                    dialogBinding.editResetCode.setText(devCode);
+                    Toast.makeText(
+                            SettingsActivity.this,
+                            "Dev mode: код подставлен автоматически",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                } else {
+                    Toast.makeText(
+                            SettingsActivity.this,
+                            "Код отправлен на почту",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                }
             }
 
             @Override

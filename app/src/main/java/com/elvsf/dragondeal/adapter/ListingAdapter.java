@@ -10,8 +10,10 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.elvsf.dragondeal.BuildConfig;
 import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.dto.ListingResponse;
+import com.elvsf.dragondeal.util.ImageUrlResolver;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -153,21 +155,7 @@ public class ListingAdapter extends RecyclerView.Adapter<ListingAdapter.ListingV
     }
 
     private String resolveImageUrl(String imageUrl) {
-        if (imageUrl == null || imageUrl.trim().isEmpty()) {
-            return null;
-        }
-
-        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-            return imageUrl
-                    .replace("http://127.0.0.1:8081", "http://192.168.0.111:8081")
-                    .replace("http://localhost:8081", "http://192.168.0.111:8081");
-        }
-
-        if (imageUrl.startsWith("/")) {
-            return "http://192.168.0.111:8081" + imageUrl;
-        }
-
-        return "http://192.168.0.111:8081/" + imageUrl;
+        return ImageUrlResolver.resolve(imageUrl, BuildConfig.BASE_URL);
     }
 
     private String safeText(String value, String fallback) {

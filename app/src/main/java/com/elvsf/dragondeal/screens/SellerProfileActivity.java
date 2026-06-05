@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.bumptech.glide.Glide;
+import com.elvsf.dragondeal.BuildConfig;
 import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.adapter.ListingAdapter;
 import com.elvsf.dragondeal.api.ListingApi;
@@ -19,6 +20,7 @@ import com.elvsf.dragondeal.databinding.ActivitySellerProfileBinding;
 import com.elvsf.dragondeal.dto.ListingResponse;
 import com.elvsf.dragondeal.dto.UserResponse;
 import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.util.ImageUrlResolver;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -238,22 +240,7 @@ public class SellerProfileActivity extends AppCompatActivity {
     }
 
     private String resolveImageUrl(String imageUrl) {
-        if (imageUrl == null || imageUrl.trim().isEmpty()) {
-            return null;
-        }
-
-        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-            return imageUrl
-                    .replace("http://127.0.0.1:8081", "http://192.168.0.111:8081")
-                    .replace("http://localhost:8081", "http://192.168.0.111:8081")
-                    .replace("http://192.168.0.106:8081", "http://192.168.0.111:8081");
-        }
-
-        if (imageUrl.startsWith("/")) {
-            return "http://192.168.0.111:8081" + imageUrl;
-        }
-
-        return "http://192.168.0.111:8081/" + imageUrl;
+        return ImageUrlResolver.resolve(imageUrl, BuildConfig.BASE_URL);
     }
 
     private String formatCreatedAt(String rawDate) {
