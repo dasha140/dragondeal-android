@@ -1,0 +1,29 @@
+# Gradle / Android build
+.gradle/
+build/
+app/build/
+*/build/
+.kotlin/
+
+# Local config
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Signing / secrets
+*.jks
+*.keystore
+keystore.properties
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent/local
+.qwen/

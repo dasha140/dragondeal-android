@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "981450466320",
+    "firebase_url": "https://market-gm-default-rtdb.firebaseio.com",
+    "project_id": "market-gm",
+    "storage_bucket": "market-gm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:981450466320:android:861cf5ee22fe064b961695",
+        "android_client_info": {
+          "package_name": "com.elvsf.dragondeal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEpyQiiexpxnkAKHu0zeUPA2t-F3iDqSU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:981450466320:android:fc18572e64b0e881961695",
+        "android_client_info": {
+          "package_name": "com.elvsf.marketgm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEpyQiiexpxnkAKHu0zeUPA2t-F3iDqSU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_card_dark"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Редактировать профиль"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <FrameLayout
+        android:layout_width="104dp"
+        android:layout_height="104dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="16dp">
+
+        <ImageView
+            android:id="@+id/dialogImageProfileAvatar"
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_settings_avatar"
+            android:contentDescription="@string/profile_avatar"
+            android:padding="14dp"
+            android:scaleType="centerCrop"
+            android:src="@drawable/outline_account_circle_24" />
+
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/buttonChooseProfilePhoto"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_dragon_red_outline_button"
+        android:foreground="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:text="Сменить фото"
+        android:textColor="#FF3B30"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Имя"
+        android:textColor="#9A9AA0"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/editDisplayName"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="6dp"
+        android:autofillHints="name"
+        android:background="@drawable/bg_input_dark"
+        android:hint="Имя"
+        android:inputType="textPersonName"
+        android:maxLines="1"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#737373"
+        android:textSize="15sp" />
+
+    <ProgressBar
+        android:id="@+id/progressDialogProfile"
+        style="?android:attr/progressBarStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="14dp"
+        android:indeterminateTint="#FF3B30"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/buttonCancelProfile"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_dragon_red_outline_button"
+            android:foreground="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:text="Отмена"
+            android:textColor="#FF3B30"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/buttonSaveProfile"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_dragon_red_button"
+            android:foreground="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:text="Сохранить"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+</LinearLayout>

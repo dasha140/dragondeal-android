@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/crypto_wallet"
+        android:icon="@drawable/ic_nav_wallet"
+        android:title="Кошелек" />
+
+    <item
+        android:id="@+id/chats"
+        android:icon="@drawable/ic_nav_chat"
+        android:title="Чаты" />
+
+    <item
+        android:id="@+id/home"
+        android:icon="@drawable/ic_nav_home"
+        android:title="Главная" />
+
+    <item
+        android:id="@+id/settings"
+        android:icon="@drawable/ic_nav_settings"
+        android:title="Профиль" />
+
+</menu>
