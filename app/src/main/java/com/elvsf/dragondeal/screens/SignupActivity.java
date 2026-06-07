@@ -11,8 +11,8 @@ import com.elvsf.dragondeal.api.AuthApi;
 import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivitySignupBinding;
 import com.elvsf.dragondeal.dto.MessageResponse;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
+import com.elvsf.dragondeal.dto.RegisterRequest;
+import com.elvsf.dragondeal.util.BackendErrorParser;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -20,13 +20,10 @@ import retrofit2.Response;
 
 public class SignupActivity extends AppCompatActivity {
 
-    private ActivitySignupBinding binding;
-    private FirebaseAuth firebaseAuth;
-    private AuthApi authApi;
+    public static final String EXTRA_DEV_CODE = "devCode";
 
-    private String pendingUsername;
-    private String pendingEmail;
-    private String pendingPassword;
+    private ActivitySignupBinding binding;
+    private AuthApi authApi;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,14 +32,13 @@ public class SignupActivity extends AppCompatActivity {
         binding = ActivitySignupBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        firebaseAuth = FirebaseAuth.getInstance();
         authApi = RetrofitClient.getInstance(this).create(AuthApi.class);
 
         setupClicks();
     }
 
     private void setupClicks() {
-        binding.btnCreateAccount.setOnClickListener(view -> checkUsernameAndEmailBeforeFirebase());
+        binding.btnCreateAccount.setOnClickListener(view -> requestRegistration());
 
         binding.tvGoToLogin.setOnClickListener(view -> {
             Intent intent = new Intent(SignupActivity.this, SigninActivity.class);
@@ -51,7 +47,7 @@ public class SignupActivity extends AppCompatActivity {
         });
     }
 
-    private void checkUsernameAndEmailBeforeFirebase() {
+    private void requestRegistration() {
         String username = binding.etUsername.getText().toString().trim();
         String email = binding.etRegisterEmail.getText().toString().trim();
         String password = binding.etRegisterPassword.getText().toString().trim();
@@ -77,12 +73,9 @@ public class SignupActivity extends AppCompatActivity {
 
         binding.textPasswordRules.setTextColor(android.graphics.Color.parseColor("#8A8A8A"));
 
-        pendingUsername = username;
-        pendingEmail = email;
-        pendingPassword = password;
-
         setLoading(true, "Проверяем...");
 
+        // Step 1: check username availability
         authApi.checkUsername(username).enqueue(new Callback<MessageResponse>() {
             @Override
             public void onResponse(
@@ -102,7 +95,8 @@ public class SignupActivity extends AppCompatActivity {
                     return;
                 }
 
-                checkEmailBeforeFirebase(email);
+                // Step 2: check email availability
+                checkEmailAvailability(username, email, password);
             }
 
             @Override
@@ -116,7 +110,7 @@ public class SignupActivity extends AppCompatActivity {
         });
     }
 
-    private void checkEmailBeforeFirebase(String email) {
+    private void checkEmailAvailability(String username, String email, String password) {
         authApi.checkEmail(email).enqueue(new Callback<MessageResponse>() {
             @Override
             public void onResponse(
@@ -136,7 +130,8 @@ public class SignupActivity extends AppCompatActivity {
                     return;
                 }
 
-                startFirebaseRegistration();
+                // Step 3: call register/request
+                sendRegisterRequest(username, email, password);
             }
 
             @Override
@@ -150,116 +145,48 @@ public class SignupActivity extends AppCompatActivity {
         });
     }
 
-    private void startFirebaseRegistration() {
-        setLoading(true, "Создание...");
+    private void sendRegisterRequest(String username, String email, String password) {
+        setLoading(true, "Отправляем код...");
 
-        firebaseAuth.createUserWithEmailAndPassword(pendingEmail, pendingPassword)
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        setLoading(false, "Создать аккаунт");
+        RegisterRequest request = new RegisterRequest(username, email, password);
 
-                        String message = "Не удалось создать аккаунт";
-
-                        if (task.getException() != null && task.getException().getMessage() != null) {
-                            message = task.getException().getMessage();
-                        }
-
-                        if (message.contains("email address is already in use")
-                                || message.contains("already in use")) {
-                            binding.etRegisterEmail.setError("Этот email уже используется");
-                            showToast("Этот email уже используется");
-                            return;
-                        }
-
-                        if (message.contains("badly formatted")) {
-                            binding.etRegisterEmail.setError("Некорректный email");
-                            showToast("Проверь email");
-                            return;
-                        }
-
-                        showToast(message);
-                        return;
-                    }
-
-                    FirebaseUser user = firebaseAuth.getCurrentUser();
-
-                    if (user == null) {
-                        setLoading(false, "Создать аккаунт");
-                        showToast("Firebase не вернул пользователя");
-                        return;
-                    }
-
-                    sendVerificationEmail(user);
-                });
-    }
-
-    private void tryLoginExistingFirebaseUser(String email, String password) {
-        firebaseAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        setLoading(false, "Создать аккаунт");
-
-                        String message = "Не удалось создать аккаунт";
-
-                        if (task.getException() != null && task.getException().getMessage() != null) {
-                            message = task.getException().getMessage();
-                        }
-
-                        if (message.contains("email address is already in use")
-                                || message.contains("already in use")) {
-                            binding.etRegisterEmail.setError("Этот email уже используется");
-                            showToast("Этот email уже используется");
-                            return;
-                        }
-
-                        showToast(message);
-                        return;
-                    }
-
-                    FirebaseUser user = firebaseAuth.getCurrentUser();
-
-                    if (user == null) {
-                        setLoading(false, "Создать аккаунт");
-                        showToast("Firebase-пользователь не найден");
-                        return;
-                    }
-
-                    if (user.isEmailVerified()) {
-                        setLoading(false, "Создать аккаунт");
-                        openVerifyEmailScreen();
-                    } else {
-                        sendVerificationEmail(user);
-                    }
-                });
-    }
-
-    private void sendVerificationEmail(FirebaseUser user) {
-        user.sendEmailVerification()
-                .addOnCompleteListener(task -> {
+        authApi.registerRequest(request).enqueue(new Callback<MessageResponse>() {
+            @Override
+            public void onResponse(
+                    @NonNull Call<MessageResponse> call,
+                    @NonNull Response<MessageResponse> response
+            ) {
+                if (!response.isSuccessful() || response.body() == null) {
                     setLoading(false, "Создать аккаунт");
+                    String errorMessage = BackendErrorParser.parse(response);
+                    showToast(errorMessage);
+                    return;
+                }
 
-                    if (!task.isSuccessful()) {
-                        String message = "Не удалось отправить письмо";
+                MessageResponse body = response.body();
+                String devCode = body.getDevCode();
 
-                        if (task.getException() != null && task.getException().getMessage() != null) {
-                            message = task.getException().getMessage();
-                        }
+                // Always open VerifyEmailActivity, pass devCode if available
+                Intent intent = new Intent(SignupActivity.this, VerifyEmailActivity.class);
+                intent.putExtra(VerifyEmailActivity.EXTRA_USERNAME, username);
+                intent.putExtra(VerifyEmailActivity.EXTRA_EMAIL, email);
+                intent.putExtra(VerifyEmailActivity.EXTRA_PASSWORD, password);
+                if (devCode != null) {
+                    intent.putExtra(EXTRA_DEV_CODE, devCode);
+                }
+                startActivity(intent);
+                finish();
+            }
 
-                        showToast(message);
-                        return;
-                    }
-
-                    showToast("Письмо подтверждения отправлено");
-                    openVerifyEmailScreen();
-                });
-    }
-
-    private void openVerifyEmailScreen() {
-        Intent intent = new Intent(SignupActivity.this, VerifyEmailActivity.class);
-        intent.putExtra(VerifyEmailActivity.EXTRA_USERNAME, pendingUsername);
-        intent.putExtra(VerifyEmailActivity.EXTRA_EMAIL, pendingEmail);
-        intent.putExtra(VerifyEmailActivity.EXTRA_PASSWORD, pendingPassword);
-        startActivity(intent);
+            @Override
+            public void onFailure(
+                    @NonNull Call<MessageResponse> call,
+                    @NonNull Throwable t
+            ) {
+                setLoading(false, "Создать аккаунт");
+                showToast("Ошибка сети: " + t.getMessage());
+            }
+        });
     }
 
     private String validatePassword(String password) {

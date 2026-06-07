@@ -11,11 +11,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.elvsf.dragondeal.api.AuthApi;
 import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivitySigninBinding;
+import com.elvsf.dragondeal.databinding.DialogPasswordResetBinding;
 import com.elvsf.dragondeal.dto.AuthResponse;
 import com.elvsf.dragondeal.dto.LoginRequest;
+import com.elvsf.dragondeal.dto.MessageResponse;
+import com.elvsf.dragondeal.dto.PasswordResetConfirmRequest;
+import com.elvsf.dragondeal.dto.PasswordResetRequest;
 import com.elvsf.dragondeal.storage.TokenStorage;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
+import com.elvsf.dragondeal.util.BackendErrorParser;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -26,7 +30,6 @@ public class SigninActivity extends AppCompatActivity {
     private ActivitySigninBinding binding;
     private AuthApi authApi;
     private TokenStorage tokenStorage;
-    private FirebaseAuth firebaseAuth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +40,6 @@ public class SigninActivity extends AppCompatActivity {
 
         authApi = RetrofitClient.getInstance(this).create(AuthApi.class);
         tokenStorage = new TokenStorage(this);
-        firebaseAuth = FirebaseAuth.getInstance();
 
         if (tokenStorage.isLoggedIn()) {
             openMainScreen();
@@ -48,7 +50,7 @@ public class SigninActivity extends AppCompatActivity {
     }
 
     private void setupClicks() {
-        binding.signin.setOnClickListener(view -> loginWithFirebase());
+        binding.signin.setOnClickListener(view -> loginWithEmailPassword());
 
         binding.signup.setOnClickListener(view -> {
             Intent intent = new Intent(SigninActivity.this, SignupActivity.class);
@@ -58,7 +60,7 @@ public class SigninActivity extends AppCompatActivity {
         binding.textForgotPassword.setOnClickListener(view -> showResetPasswordDialog());
     }
 
-    private void loginWithFirebase() {
+    private void loginWithEmailPassword() {
         String email = binding.email.getText().toString().trim();
         String password = binding.password.getText().toString().trim();
 
@@ -72,112 +74,8 @@ public class SigninActivity extends AppCompatActivity {
             return;
         }
 
-        setLoading(true, "Проверяем...");
+        setLoading(true, "Входим...");
 
-        firebaseAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        setLoading(false, "Войти");
-
-                        String message = "Неверный email или пароль";
-
-                        if (task.getException() != null && task.getException().getMessage() != null) {
-                            message = task.getException().getMessage();
-                        }
-
-                        showErrorDialog("Ошибка входа", message);
-                        return;
-                    }
-
-                    FirebaseUser user = firebaseAuth.getCurrentUser();
-
-                    if (user == null) {
-                        setLoading(false, "Войти");
-                        showToast("Firebase-пользователь не найден");
-                        return;
-                    }
-
-                    user.reload().addOnCompleteListener(reloadTask -> {
-                        FirebaseUser updatedUser = firebaseAuth.getCurrentUser();
-
-                        if (updatedUser == null) {
-                            setLoading(false, "Войти");
-                            showToast("Firebase-пользователь не найден");
-                            return;
-                        }
-
-                        if (!updatedUser.isEmailVerified()) {
-                            setLoading(false, "Войти");
-                            showEmailNotVerifiedDialog(updatedUser);
-                            return;
-                        }
-
-                        loginInBackendWithFirebaseToken(updatedUser);
-                    });
-                });
-    }
-
-    private void loginInBackendWithFirebaseToken(FirebaseUser firebaseUser) {
-        firebaseUser.getIdToken(true)
-                .addOnCompleteListener(tokenTask -> {
-                    if (!tokenTask.isSuccessful() || tokenTask.getResult() == null) {
-                        setLoading(false, "Войти");
-                        showToast("Не удалось получить Firebase token");
-                        return;
-                    }
-
-                    String idToken = tokenTask.getResult().getToken();
-
-                    authApi.firebaseLogin(new com.elvsf.dragondeal.dto.FirebaseLoginRequest(idToken))
-                            .enqueue(new Callback<AuthResponse>() {
-                                @Override
-                                public void onResponse(
-                                        @NonNull Call<AuthResponse> call,
-                                        @NonNull Response<AuthResponse> response
-                                ) {
-                                    setLoading(false, "Войти");
-
-                                    if (!response.isSuccessful() || response.body() == null) {
-                                        String errorMessage = "Backend не выдал токен: " + response.code();
-
-                                        try {
-                                            if (response.errorBody() != null) {
-                                                errorMessage = response.errorBody().string();
-                                            }
-                                        } catch (Exception ignored) {
-                                        }
-
-                                        showErrorDialog("Ошибка backend", errorMessage);
-                                        return;
-                                    }
-
-                                    AuthResponse authResponse = response.body();
-
-                                    tokenStorage.saveAuthData(
-                                            authResponse.getAccessToken(),
-                                            authResponse.getId(),
-                                            authResponse.getUsername(),
-                                            authResponse.getEmail(),
-                                            authResponse.getRole()
-                                    );
-
-                                    showToast("Вход выполнен");
-                                    openMainScreen();
-                                }
-
-                                @Override
-                                public void onFailure(
-                                        @NonNull Call<AuthResponse> call,
-                                        @NonNull Throwable t
-                                ) {
-                                    setLoading(false, "Войти");
-                                    showToast("Ошибка сети: " + t.getMessage());
-                                }
-                            });
-                });
-    }
-
-    private void loginInBackend(String email, String password) {
         LoginRequest request = new LoginRequest(email, password);
 
         authApi.login(request).enqueue(new Callback<AuthResponse>() {
@@ -189,16 +87,8 @@ public class SigninActivity extends AppCompatActivity {
                 setLoading(false, "Войти");
 
                 if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = "Firebase вход выполнен, но backend не выдал токен: " + response.code();
-
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    showErrorDialog("Ошибка backend", errorMessage);
+                    String errorMessage = BackendErrorParser.parse(response);
+                    showErrorDialog("Ошибка входа", errorMessage);
                     return;
                 }
 
@@ -227,38 +117,9 @@ public class SigninActivity extends AppCompatActivity {
                     @NonNull Throwable t
             ) {
                 setLoading(false, "Войти");
-                showToast("Ошибка сети: " + t.getMessage());
+                showToast(BackendErrorParser.parse(t));
             }
         });
-    }
-
-    private void showEmailNotVerifiedDialog(FirebaseUser user) {
-        DarkDialog.showConfirm(
-                SigninActivity.this,
-                "Email не подтверждён",
-                "Сначала подтвердите email по ссылке в письме. Если письмо не пришло, можно отправить его ещё раз.",
-                "Отправить ещё раз",
-                "Закрыть",
-                () -> resendVerificationEmail(user)
-        );
-    }
-
-    private void resendVerificationEmail(FirebaseUser user) {
-        user.sendEmailVerification()
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        showToast("Письмо подтверждения отправлено");
-                        return;
-                    }
-
-                    String message = "Не удалось отправить письмо";
-
-                    if (task.getException() != null && task.getException().getMessage() != null) {
-                        message = task.getException().getMessage();
-                    }
-
-                    showToast(message);
-                });
     }
 
     private void showResetPasswordDialog() {
@@ -270,25 +131,184 @@ public class SigninActivity extends AppCompatActivity {
             return;
         }
 
-        sendPasswordResetEmail(email);
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        DialogPasswordResetBinding dialogBinding = DialogPasswordResetBinding.inflate(getLayoutInflater());
+
+        dialog.setContentView(dialogBinding.getRoot());
+
+        dialogBinding.editResetEmail.setText(email);
+
+        dialogBinding.buttonCancelPasswordReset.setOnClickListener(view -> dialog.dismiss());
+
+        dialogBinding.buttonSendPasswordResetCode.setOnClickListener(view -> {
+            String resetEmail = dialogBinding.editResetEmail.getText().toString().trim();
+
+            if (resetEmail.isEmpty()) {
+                dialogBinding.editResetEmail.setError("Введите почту");
+                return;
+            }
+
+            requestPasswordResetCode(dialogBinding, resetEmail);
+        });
+
+        dialogBinding.buttonConfirmPasswordReset.setOnClickListener(view -> {
+            String resetEmail = dialogBinding.editResetEmail.getText().toString().trim();
+            String code = dialogBinding.editResetCode.getText().toString().trim();
+            String newPassword = dialogBinding.editResetNewPassword.getText().toString().trim();
+
+            if (resetEmail.isEmpty()) {
+                dialogBinding.editResetEmail.setError("Введите почту");
+                return;
+            }
+
+            if (code.isEmpty()) {
+                dialogBinding.editResetCode.setError("Введите код");
+                return;
+            }
+
+            if (newPassword.isEmpty()) {
+                dialogBinding.editResetNewPassword.setError("Введите новый пароль");
+                return;
+            }
+
+            if (newPassword.length() < 8) {
+                dialogBinding.editResetNewPassword.setError("Минимум 8 символов");
+                return;
+            }
+
+            confirmPasswordReset(dialogBinding, dialog, resetEmail, code, newPassword);
+        });
+
+        dialog.show();
     }
 
-    private void sendPasswordResetEmail(String email) {
-        firebaseAuth.sendPasswordResetEmail(email)
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        showToast("Письмо для смены пароля отправлено");
-                        return;
-                    }
+    private void requestPasswordResetCode(
+            DialogPasswordResetBinding dialogBinding,
+            String email
+    ) {
+        dialogBinding.progressPasswordReset.setVisibility(android.view.View.VISIBLE);
+        dialogBinding.buttonSendPasswordResetCode.setEnabled(false);
+        dialogBinding.buttonConfirmPasswordReset.setEnabled(false);
 
-                    String message = "Не удалось отправить письмо";
+        PasswordResetRequest request = new PasswordResetRequest(email);
 
-                    if (task.getException() != null && task.getException().getMessage() != null) {
-                        message = task.getException().getMessage();
-                    }
+        authApi.requestPasswordReset(request).enqueue(new Callback<MessageResponse>() {
+            @Override
+            public void onResponse(
+                    @NonNull Call<MessageResponse> call,
+                    @NonNull Response<MessageResponse> response
+            ) {
+                dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
+                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
+                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
 
-                    showToast(message);
-                });
+                if (!response.isSuccessful()) {
+                    Toast.makeText(
+                            SigninActivity.this,
+                            BackendErrorParser.parse(response),
+                            Toast.LENGTH_LONG
+                    ).show();
+                    return;
+                }
+
+                MessageResponse body = response.body();
+                String devCode = body != null ? body.getDevCode() : null;
+
+                if (devCode != null) {
+                    dialogBinding.editResetCode.setText(devCode);
+                    Toast.makeText(
+                            SigninActivity.this,
+                            "Dev mode: код подставлен автоматически",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                } else {
+                    Toast.makeText(
+                            SigninActivity.this,
+                            "Код отправлен на почту",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                }
+            }
+
+            @Override
+            public void onFailure(
+                    @NonNull Call<MessageResponse> call,
+                    @NonNull Throwable t
+            ) {
+                dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
+                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
+                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
+
+                Toast.makeText(
+                        SigninActivity.this,
+                        BackendErrorParser.parse(t),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
+    }
+
+    private void confirmPasswordReset(
+            DialogPasswordResetBinding dialogBinding,
+            BottomSheetDialog dialog,
+            String email,
+            String code,
+            String newPassword
+    ) {
+        dialogBinding.progressPasswordReset.setVisibility(android.view.View.VISIBLE);
+        dialogBinding.buttonSendPasswordResetCode.setEnabled(false);
+        dialogBinding.buttonConfirmPasswordReset.setEnabled(false);
+
+        PasswordResetConfirmRequest request = new PasswordResetConfirmRequest(
+                email,
+                code,
+                newPassword
+        );
+
+        authApi.confirmPasswordReset(request).enqueue(new Callback<AuthResponse>() {
+            @Override
+            public void onResponse(
+                    @NonNull Call<AuthResponse> call,
+                    @NonNull Response<AuthResponse> response
+            ) {
+                dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
+                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
+                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
+
+                if (!response.isSuccessful() || response.body() == null) {
+                    Toast.makeText(
+                            SigninActivity.this,
+                            BackendErrorParser.parse(response),
+                            Toast.LENGTH_LONG
+                    ).show();
+                    return;
+                }
+
+                Toast.makeText(
+                        SigninActivity.this,
+                        "Пароль успешно изменён. Войдите с новым паролем.",
+                        Toast.LENGTH_LONG
+                ).show();
+
+                dialog.dismiss();
+            }
+
+            @Override
+            public void onFailure(
+                    @NonNull Call<AuthResponse> call,
+                    @NonNull Throwable t
+            ) {
+                dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
+                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
+                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
+
+                Toast.makeText(
+                        SigninActivity.this,
+                        BackendErrorParser.parse(t),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
     }
 
     private void setLoading(boolean loading, String text) {
