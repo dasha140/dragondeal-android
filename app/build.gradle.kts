@@ -37,9 +37,9 @@ android {
             val localApiUrl = if (localPropsFile.exists()) {
                 val props = Properties()
                 localPropsFile.inputStream().use { props.load(it) }
-                props.getProperty("API_BASE_URL", "http://192.168.0.111:8081/api/")
+                props.getProperty("API_BASE_URL", "http://dragondeal.online:8081/api/")
             } else {
-                "http://192.168.0.111:8081/api/"
+                "http://dragondeal.online:8081/api/"
             }
             buildConfigField("String", "BASE_URL", "\"${localApiUrl}\"")
         }
