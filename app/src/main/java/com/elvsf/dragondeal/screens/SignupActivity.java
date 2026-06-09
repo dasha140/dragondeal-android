@@ -2,11 +2,13 @@ package com.elvsf.dragondeal.screens;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.method.PasswordTransformationMethod;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.api.AuthApi;
 import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivitySignupBinding;
@@ -44,6 +46,28 @@ public class SignupActivity extends AppCompatActivity {
             Intent intent = new Intent(SignupActivity.this, SigninActivity.class);
             startActivity(intent);
             finish();
+        });
+
+        setupPasswordToggle(binding.etRegisterPassword, binding.btnToggleRegisterPassword);
+    }
+
+    private void setupPasswordToggle(
+            android.widget.EditText editText,
+            android.widget.ImageButton toggleButton
+    ) {
+        final boolean[] isVisible = {false};
+        toggleButton.setOnClickListener(v -> {
+            if (isVisible[0]) {
+                editText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+                toggleButton.setImageResource(R.drawable.ic_eye_off);
+                toggleButton.setContentDescription("Показать пароль");
+            } else {
+                editText.setTransformationMethod(null);
+                toggleButton.setImageResource(R.drawable.ic_eye);
+                toggleButton.setContentDescription("Скрыть пароль");
+            }
+            isVisible[0] = !isVisible[0];
+            editText.setSelection(editText.getText().length());
         });
     }
 

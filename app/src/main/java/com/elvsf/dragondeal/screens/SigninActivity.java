@@ -2,10 +2,12 @@ package com.elvsf.dragondeal.screens;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.method.PasswordTransformationMethod;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.R;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.api.AuthApi;
@@ -58,6 +60,28 @@ public class SigninActivity extends AppCompatActivity {
         });
 
         binding.textForgotPassword.setOnClickListener(view -> showResetPasswordDialog());
+
+        setupPasswordToggle(binding.password, binding.btnTogglePassword);
+    }
+
+    private void setupPasswordToggle(
+            android.widget.EditText editText,
+            android.widget.ImageButton toggleButton
+    ) {
+        final boolean[] isVisible = {false};
+        toggleButton.setOnClickListener(v -> {
+            if (isVisible[0]) {
+                editText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+                toggleButton.setImageResource(R.drawable.ic_eye_off);
+                toggleButton.setContentDescription("Показать пароль");
+            } else {
+                editText.setTransformationMethod(null);
+                toggleButton.setImageResource(R.drawable.ic_eye);
+                toggleButton.setContentDescription("Скрыть пароль");
+            }
+            isVisible[0] = !isVisible[0];
+            editText.setSelection(editText.getText().length());
+        });
     }
 
     private void loginWithEmailPassword() {
@@ -139,6 +163,8 @@ public class SigninActivity extends AppCompatActivity {
         dialogBinding.editResetEmail.setText(email);
 
         dialogBinding.buttonCancelPasswordReset.setOnClickListener(view -> dialog.dismiss());
+
+        setupPasswordToggle(dialogBinding.editResetNewPassword, dialogBinding.btnToggleResetPassword);
 
         dialogBinding.buttonSendPasswordResetCode.setOnClickListener(view -> {
             String resetEmail = dialogBinding.editResetEmail.getText().toString().trim();

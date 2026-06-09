@@ -63,20 +63,37 @@
         android:textColor="#9A9AA0"
         android:textSize="13sp" />
 
-    <EditText
-        android:id="@+id/editCurrentPassword"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="50dp"
         android:layout_marginTop="6dp"
-        android:background="@drawable/bg_input_dark"
-        android:hint="Введите пароль"
-        android:inputType="textPassword"
-        android:maxLines="1"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:textColor="#FFFFFF"
-        android:textColorHint="#737373"
-        android:textSize="15sp" />
+        android:background="@drawable/bg_input_dark">
+
+        <EditText
+            android:id="@+id/editCurrentPassword"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:hint="Введите пароль"
+            android:inputType="textPassword"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="44dp"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#737373"
+            android:textSize="15sp" />
+
+        <ImageButton
+            android:id="@+id/btnToggleChangeEmailPassword"
+            android:layout_width="40dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:background="@null"
+            android:contentDescription="Показать пароль"
+            android:padding="10dp"
+            android:src="@drawable/ic_eye_off" />
+
+    </FrameLayout>
 
     <TextView
         android:id="@+id/buttonSendEmailCode"

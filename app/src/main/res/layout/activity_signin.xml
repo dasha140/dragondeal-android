@@ -63,19 +63,36 @@
                 android:textColor="#FFFFFF"
                 android:textColorHint="#8A8A8A" />
 
-            <EditText
-                android:id="@+id/password"
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
                 android:layout_marginTop="14dp"
-                android:autofillHints=""
-                android:background="#1A1A1A"
-                android:hint="@string/password"
-                android:inputType="textPassword"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#8A8A8A" />
+                android:background="#1A1A1A">
+
+                <EditText
+                    android:id="@+id/password"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:autofillHints=""
+                    android:background="@null"
+                    android:hint="@string/password"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="44dp"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#8A8A8A" />
+
+                <ImageButton
+                    android:id="@+id/btnTogglePassword"
+                    android:layout_width="40dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="end"
+                    android:background="@null"
+                    android:contentDescription="Показать пароль"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_eye_off" />
+
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/textForgotPassword"

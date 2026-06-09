@@ -8,6 +8,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
+import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -709,6 +710,8 @@ public class SettingsActivity extends AppCompatActivity {
 
         dialogBinding.buttonCancelEmailChange.setOnClickListener(view -> dialog.dismiss());
 
+        setupPasswordToggle(dialogBinding.editCurrentPassword, dialogBinding.btnToggleChangeEmailPassword);
+
         dialogBinding.buttonSendEmailCode.setOnClickListener(view -> {
             String newEmail = dialogBinding.editNewEmail.getText().toString().trim();
             String currentPassword = dialogBinding.editCurrentPassword.getText().toString().trim();
@@ -969,6 +972,8 @@ public class SettingsActivity extends AppCompatActivity {
 
         dialogBinding.buttonCancelPasswordReset.setOnClickListener(view -> dialog.dismiss());
 
+        setupPasswordToggle(dialogBinding.editResetNewPassword, dialogBinding.btnToggleResetPassword);
+
         dialogBinding.buttonSendPasswordResetCode.setOnClickListener(view -> {
             String email = dialogBinding.editResetEmail.getText().toString().trim();
 
@@ -1147,6 +1152,26 @@ public class SettingsActivity extends AppCompatActivity {
                         Toast.LENGTH_LONG
                 ).show();
             }
+        });
+    }
+
+    private void setupPasswordToggle(
+            android.widget.EditText editText,
+            android.widget.ImageButton toggleButton
+    ) {
+        final boolean[] isVisible = {false};
+        toggleButton.setOnClickListener(v -> {
+            if (isVisible[0]) {
+                editText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+                toggleButton.setImageResource(R.drawable.ic_eye_off);
+                toggleButton.setContentDescription("Показать пароль");
+            } else {
+                editText.setTransformationMethod(null);
+                toggleButton.setImageResource(R.drawable.ic_eye);
+                toggleButton.setContentDescription("Скрыть пароль");
+            }
+            isVisible[0] = !isVisible[0];
+            editText.setSelection(editText.getText().length());
         });
     }
 }

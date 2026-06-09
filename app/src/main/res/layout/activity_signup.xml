@@ -86,20 +86,37 @@
                     android:textColorHint="#8A8A8A"
                     android:textSize="14sp" />
 
-                <EditText
-                    android:id="@+id/etRegisterPassword"
+                <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="54dp"
                     android:layout_marginTop="10dp"
-                    android:autofillHints=""
-                    android:background="@drawable/bg_input_dark"
-                    android:hint="@string/password"
-                    android:inputType="textPassword"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#8A8A8A"
-                    android:textSize="14sp" />
+                    android:background="@drawable/bg_input_dark">
+
+                    <EditText
+                        android:id="@+id/etRegisterPassword"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:autofillHints=""
+                        android:background="@null"
+                        android:hint="@string/password"
+                        android:inputType="textPassword"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="44dp"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#8A8A8A"
+                        android:textSize="14sp" />
+
+                    <ImageButton
+                        android:id="@+id/btnToggleRegisterPassword"
+                        android:layout_width="40dp"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="end"
+                        android:background="@null"
+                        android:contentDescription="Показать пароль"
+                        android:padding="10dp"
+                        android:src="@drawable/ic_eye_off" />
+
+                </FrameLayout>
 
                 <TextView
                     android:id="@+id/textPasswordRules"
