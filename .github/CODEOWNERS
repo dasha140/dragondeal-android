@@ -1,0 +1,14 @@
+# CODEOWNERS
+# These owners will be requested for review on PRs that touch these files
+
+# Overall project owners
+* @dasha140
+
+# Android app
+/app/ @dasha140
+
+# Smart contracts
+/blockchain/ @dasha140
+
+# CI/CD workflows
+/.github/workflows/ @dasha140
