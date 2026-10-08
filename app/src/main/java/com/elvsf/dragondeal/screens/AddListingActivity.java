@@ -18,12 +18,12 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.api.ListingApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.api.UploadApi;
 import com.elvsf.dragondeal.databinding.ActivityAddListingBinding;
 import com.elvsf.dragondeal.dto.CreateListingRequest;
 import com.elvsf.dragondeal.dto.ListingResponse;
 import com.elvsf.dragondeal.dto.UploadImageResponse;
+import com.elvsf.dragondeal.util.ApiCallback;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -35,9 +35,9 @@ import java.util.Collections;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
-import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class AddListingActivity extends AppCompatActivity {
 
@@ -97,8 +97,8 @@ public class AddListingActivity extends AppCompatActivity {
         binding = ActivityAddListingBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        listingApi = RetrofitClient.getInstance(this).create(ListingApi.class);
-        uploadApi = RetrofitClient.getInstance(this).create(UploadApi.class);
+        listingApi = get(ListingApi.class);
+        uploadApi = get(UploadApi.class);
 
         setupSpinners();
         setupClicks();
@@ -187,23 +187,10 @@ public class AddListingActivity extends AppCompatActivity {
                     requestBody
             );
 
-            uploadApi.uploadListingImage(filePart).enqueue(new Callback<UploadImageResponse>() {
+            uploadApi.uploadListingImage(filePart).enqueue(new ApiCallback<UploadImageResponse>(this) {
                 @Override
-                public void onResponse(Call<UploadImageResponse> call, Response<UploadImageResponse> response) {
+                protected void onSuccess(Response<UploadImageResponse> response) {
                     setLoading(false);
-
-                    if (!response.isSuccessful() || response.body() == null) {
-                        uploadedImageUrl = null;
-                        binding.buttonChooseImage.setText("Выбрать изображение");
-
-                        Toast.makeText(
-                                AddListingActivity.this,
-                                "Не удалось загрузить картинку: " + response.code(),
-                                Toast.LENGTH_LONG
-                        ).show();
-                        return;
-                    }
-
                     uploadedImageUrl = response.body().getImageUrl();
                     binding.buttonChooseImage.setText("Картинка загружена");
 
@@ -215,17 +202,11 @@ public class AddListingActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void onFailure(Call<UploadImageResponse> call, Throwable throwable) {
+                protected void showError(String message) {
                     setLoading(false);
-
                     uploadedImageUrl = null;
                     binding.buttonChooseImage.setText("Выбрать изображение");
-
-                    Toast.makeText(
-                            AddListingActivity.this,
-                            "Ошибка загрузки картинки: " + throwable.getMessage(),
-                            Toast.LENGTH_LONG
-                    ).show();
+                    super.showError(message);
                 }
             });
 
@@ -357,28 +338,10 @@ public class AddListingActivity extends AppCompatActivity {
 
         setLoading(true);
 
-        listingApi.createListing(request).enqueue(new Callback<ListingResponse>() {
+        listingApi.createListing(request).enqueue(new ApiCallback<ListingResponse>(this) {
             @Override
-            public void onResponse(Call<ListingResponse> call, Response<ListingResponse> response) {
+            protected void onSuccess(Response<ListingResponse> response) {
                 setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    String errorMessage = "Ошибка создания: " + response.code();
-
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    Toast.makeText(
-                            AddListingActivity.this,
-                            errorMessage,
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 Toast.makeText(
                         AddListingActivity.this,
@@ -390,14 +353,9 @@ public class AddListingActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(Call<ListingResponse> call, Throwable throwable) {
+            protected void showError(String message) {
                 setLoading(false);
-
-                Toast.makeText(
-                        AddListingActivity.this,
-                        "Ошибка подключения: " + throwable.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
+                super.showError(message);
             }
         });
     }

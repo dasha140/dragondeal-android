@@ -1,19 +1,18 @@
 package com.elvsf.dragondeal.api.chat;
 
-import android.content.Context;
-
 import com.elvsf.dragondeal.api.RetrofitClient;
 
 import java.util.List;
 
 import retrofit2.Call;
+import retrofit2.Retrofit;
 
 public class ChatRepository {
 
     private final ChatApi chatApi;
 
-    public ChatRepository(Context context) {
-        chatApi = RetrofitClient.getInstance(context).create(ChatApi.class);
+    public ChatRepository(Retrofit retrofit) {
+        chatApi = retrofit.create(ChatApi.class);
     }
 
     public Call<List<ChatResponse>> findMyChats() {

@@ -1,6 +1,6 @@
 package com.elvsf.dragondeal.api;
 
-import android.content.Context;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -15,13 +15,13 @@ import okhttp3.Response;
 
 public class AuthInterceptor implements Interceptor {
 
+    private static final String TAG = "AuthInterceptor";
+
     private final TokenStorage tokenStorage;
     private final boolean useXAuthToken;
 
-    public AuthInterceptor(Context context) {
-        this.tokenStorage = new TokenStorage(context.getApplicationContext());
-        // Yandex Cloud Functions proxy blocks "Authorization: Bearer <token>" at the gateway level.
-        // Use X-Auth-Token header instead when talking to Yandex Cloud backend.
+    public AuthInterceptor(TokenStorage tokenStorage) {
+        this.tokenStorage = tokenStorage;
         this.useXAuthToken = isYandexCloudUrl();
     }
 
@@ -34,10 +34,23 @@ public class AuthInterceptor implements Interceptor {
     @Override
     public Response intercept(@NonNull Chain chain) throws IOException {
         Request originalRequest = chain.request();
+        String method = originalRequest.method();
+        String url = originalRequest.url().toString();
 
         String token = tokenStorage.getAccessToken();
+        boolean tokenExists = token != null && !token.trim().isEmpty();
 
-        if (token == null || token.trim().isEmpty()) {
+        if (tokenExists) {
+            String headerName = useXAuthToken ? "X-Auth-Token" : "Authorization";
+            Log.d(TAG, "Request: " + method + " " + url
+                    + " | tokenExists=true | header=" + headerName
+                    + " | yandex=" + useXAuthToken);
+        } else {
+            Log.d(TAG, "Request: " + method + " " + url
+                    + " | tokenExists=false | no auth header added");
+        }
+
+        if (!tokenExists) {
             return chain.proceed(originalRequest);
         }
 
@@ -46,13 +59,20 @@ public class AuthInterceptor implements Interceptor {
         Request.Builder builder = originalRequest.newBuilder();
 
         if (useXAuthToken) {
-            // Yandex Cloud Functions proxy passes X-Auth-Token through to the backend
             builder.header("X-Auth-Token", cleanToken);
         } else {
-            // Direct backend connection — use standard Authorization header
             builder.header("Authorization", "Bearer " + cleanToken);
         }
 
-        return chain.proceed(builder.build());
+        Response response = chain.proceed(builder.build());
+
+        if (response.code() == 400 || response.code() == 403) {
+            Log.e(TAG, "Auth error: " + response.code() + " "
+                    + method + " " + url
+                    + " | tokenExists=" + tokenExists
+                    + " | header=" + (useXAuthToken ? "X-Auth-Token" : "Authorization"));
+        }
+
+        return response;
     }
 }

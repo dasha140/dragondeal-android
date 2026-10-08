@@ -5,7 +5,6 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
@@ -14,21 +13,22 @@ import com.elvsf.dragondeal.BuildConfig;
 import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.adapter.ListingAdapter;
 import com.elvsf.dragondeal.api.ListingApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.api.UserApi;
 import com.elvsf.dragondeal.databinding.ActivitySellerProfileBinding;
 import com.elvsf.dragondeal.dto.ListingResponse;
 import com.elvsf.dragondeal.dto.UserResponse;
 import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.util.ApiCallback;
 import com.elvsf.dragondeal.util.ImageUrlResolver;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class SellerProfileActivity extends AppCompatActivity {
 
@@ -48,8 +48,8 @@ public class SellerProfileActivity extends AppCompatActivity {
         binding = ActivitySellerProfileBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        userApi = RetrofitClient.getInstance(this).create(UserApi.class);
-        listingApi = RetrofitClient.getInstance(this).create(ListingApi.class);
+        userApi = get(UserApi.class);
+        listingApi = get(ListingApi.class);
 
         sellerId = getIntent().getLongExtra("sellerId", 0L);
 
@@ -111,19 +111,9 @@ public class SellerProfileActivity extends AppCompatActivity {
         setLoading(true);
 
         // Load seller info
-        userApi.findUserById(sellerId).enqueue(new Callback<UserResponse>() {
+        userApi.findUserById(sellerId).enqueue(new ApiCallback<UserResponse>(this) {
             @Override
-            public void onResponse(@NonNull Call<UserResponse> call, @NonNull Response<UserResponse> response) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    setLoading(false);
-                    if (response.code() == 404) {
-                        showError("Продавец не найден");
-                    } else {
-                        showError("Не удалось загрузить профиль продавца");
-                    }
-                    return;
-                }
-
+            protected void onSuccess(Response<UserResponse> response) {
                 UserResponse user = response.body();
                 renderSellerInfo(user);
                 setLoading(false);
@@ -133,29 +123,22 @@ public class SellerProfileActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(@NonNull Call<UserResponse> call, @NonNull Throwable t) {
+            protected void showError(String message) {
                 setLoading(false);
-
-                String msg = t.getMessage();
-
-                if (msg != null && (msg.contains("Unable to resolve host") || msg.contains("ECONNREFUSED"))) {
-                    showError("Нет соединения с сервером");
+                if (message.contains("404") || message.contains("Не найдено")) {
+                    showError("Продавец не найден");
                 } else {
                     showError("Не удалось загрузить профиль продавца");
                 }
+                super.showError(message);
             }
         });
     }
 
     private void loadSellerListings() {
-        listingApi.findListingsBySellerId(sellerId).enqueue(new Callback<List<ListingResponse>>() {
+        listingApi.findListingsBySellerId(sellerId).enqueue(new ApiCallback<List<ListingResponse>>(this) {
             @Override
-            public void onResponse(@NonNull Call<List<ListingResponse>> call, @NonNull Response<List<ListingResponse>> response) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    showNoListings();
-                    return;
-                }
-
+            protected void onSuccess(Response<List<ListingResponse>> response) {
                 List<ListingResponse> result = response.body();
 
                 sellerListings.clear();
@@ -172,9 +155,10 @@ public class SellerProfileActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(@NonNull Call<List<ListingResponse>> call, @NonNull Throwable t) {
+            protected void showError(String message) {
                 // Listings failure is non-critical — just show no listings
                 showNoListings();
+                super.showError(message);
             }
         });
     }

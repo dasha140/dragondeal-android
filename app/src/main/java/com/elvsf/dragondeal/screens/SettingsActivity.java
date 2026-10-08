@@ -13,29 +13,38 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Toast;
-import androidx.annotation.NonNull;
-import com.elvsf.dragondeal.databinding.DialogPasswordResetBinding;
-import com.elvsf.dragondeal.dto.PasswordResetRequest;
-import com.elvsf.dragondeal.dto.PasswordResetConfirmRequest;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.elvsf.dragondeal.dto.AuthResponse;
-import com.elvsf.dragondeal.dto.ConfirmEmailChangeRequest;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.bumptech.glide.Glide;
 import com.elvsf.dragondeal.R;
-import com.elvsf.dragondeal.api.RetrofitClient;
+import com.elvsf.dragondeal.api.AuthApi;
 import com.elvsf.dragondeal.api.UploadApi;
 import com.elvsf.dragondeal.api.UserApi;
 import com.elvsf.dragondeal.databinding.ActivitySettingsBinding;
+import com.elvsf.dragondeal.databinding.DialogChangeEmailBinding;
 import com.elvsf.dragondeal.databinding.DialogEditProfileBinding;
+import com.elvsf.dragondeal.databinding.DialogPasswordResetBinding;
+import com.elvsf.dragondeal.databinding.DialogPersonalDataBinding;
+import com.elvsf.dragondeal.dto.AuthResponse;
+import com.elvsf.dragondeal.dto.ConfirmEmailChangeRequest;
+import com.elvsf.dragondeal.dto.MessageResponse;
+import com.elvsf.dragondeal.dto.PasswordResetConfirmRequest;
+import com.elvsf.dragondeal.dto.PasswordResetRequest;
+import com.elvsf.dragondeal.dto.RequestEmailChangeRequest;
+import com.elvsf.dragondeal.dto.UpdatePersonalDataRequest;
 import com.elvsf.dragondeal.dto.UpdateUserProfileRequest;
 import com.elvsf.dragondeal.dto.UploadImageResponse;
 import com.elvsf.dragondeal.dto.UserResponse;
 import com.elvsf.dragondeal.storage.TokenStorage;
+import com.elvsf.dragondeal.ui.BottomNavHelper;
 import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.util.ApiCallback;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
+
+import org.koin.java.KoinJavaComponent;
+import retrofit2.Retrofit;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,15 +53,10 @@ import java.io.InputStream;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;import com.elvsf.dragondeal.ui.BottomNavHelper;import com.elvsf.dragondeal.databinding.DialogPersonalDataBinding;
-import com.google.android.material.bottomsheet.BottomSheetDialog;import com.elvsf.dragondeal.dto.AuthResponse;
-import com.elvsf.dragondeal.dto.UpdatePersonalDataRequest;import com.elvsf.dragondeal.databinding.DialogChangeEmailBinding;import com.elvsf.dragondeal.api.AuthApi;
-import com.elvsf.dragondeal.dto.RequestEmailChangeRequest;
-import com.elvsf.dragondeal.dto.ConfirmEmailChangeRequest;
-import com.elvsf.dragondeal.dto.MessageResponse;
-import com.elvsf.dragondeal.util.BackendErrorParser;
+
+import static org.koin.java.KoinJavaComponent.get;
+
+import retrofit2.Response;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -79,9 +83,9 @@ public class SettingsActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
 
         tokenStorage = new TokenStorage(this);
-        userApi = RetrofitClient.getInstance(this).create(UserApi.class);
-        authApi = RetrofitClient.getInstance(this).create(AuthApi.class);
-        uploadApi = RetrofitClient.getInstance(this).create(UploadApi.class);
+        userApi = get(UserApi.class);
+        authApi = get(AuthApi.class);
+        uploadApi = get(UploadApi.class);
 
         setupAvatarPicker();
         setupProfileData();
@@ -138,16 +142,9 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
 
-        userApi.findUserById(userId).enqueue(new Callback<UserResponse>() {
+        userApi.findUserById(userId).enqueue(new ApiCallback<UserResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<UserResponse> call,
-                    @NonNull Response<UserResponse> response
-            ) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    return;
-                }
-
+            protected void onSuccess(Response<UserResponse> response) {
                 UserResponse user = response.body();
 
                 currentUsername = user.getUsername();
@@ -175,13 +172,6 @@ public class SettingsActivity extends AppCompatActivity {
                 binding.textProfileCompletedOrders.setText(completedOrdersCount + " сделок");
 
                 loadAvatarIntoMainProfile();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<UserResponse> call,
-                    @NonNull Throwable t
-            ) {
             }
         });
     }
@@ -311,40 +301,11 @@ public class SettingsActivity extends AppCompatActivity {
                     requestBody
             );
 
-            uploadApi.uploadAvatar(part).enqueue(new Callback<UploadImageResponse>() {
+            uploadApi.uploadAvatar(part).enqueue(new ApiCallback<UploadImageResponse>(this) {
                 @Override
-                public void onResponse(
-                        @NonNull Call<UploadImageResponse> call,
-                        @NonNull Response<UploadImageResponse> response
-                ) {
-                    if (!response.isSuccessful() || response.body() == null) {
-                        setDialogLoading(dialogBinding, false);
-                        String errorMessage = BackendErrorParser.parse(response);
-                        if (handleAuthError(errorMessage, dialog)) return;
-                        DarkDialog.showMessage(
-                                SettingsActivity.this,
-                                "Ошибка",
-                                errorMessage
-                        );
-                        return;
-                    }
-
+                protected void onSuccess(Response<UploadImageResponse> response) {
                     String avatarUrl = response.body().getImageUrl();
                     updateProfileOnBackend(dialog, dialogBinding, displayName, avatarUrl);
-                }
-
-                @Override
-                public void onFailure(
-                        @NonNull Call<UploadImageResponse> call,
-                        @NonNull Throwable t
-                ) {
-                    setDialogLoading(dialogBinding, false);
-
-                    Toast.makeText(
-                            SettingsActivity.this,
-                            BackendErrorParser.parse(t),
-                            Toast.LENGTH_SHORT
-                    ).show();
                 }
             });
         } catch (Exception exception) {
@@ -369,24 +330,10 @@ public class SettingsActivity extends AppCompatActivity {
                 avatarUrl
         );
 
-        userApi.updateMyProfile(request).enqueue(new Callback<UserResponse>() {
+        userApi.updateMyProfile(request).enqueue(new ApiCallback<UserResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<UserResponse> call,
-                    @NonNull Response<UserResponse> response
-            ) {
+            protected void onSuccess(Response<UserResponse> response) {
                 setDialogLoading(dialogBinding, false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    if (handleAuthError(errorMessage, dialog)) return;
-                    DarkDialog.showMessage(
-                            SettingsActivity.this,
-                            "Ошибка",
-                            errorMessage
-                    );
-                    return;
-                }
 
                 UserResponse user = response.body();
 
@@ -404,20 +351,6 @@ public class SettingsActivity extends AppCompatActivity {
 
                 Toast.makeText(SettingsActivity.this, "Профиль обновлён", Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<UserResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setDialogLoading(dialogBinding, false);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_SHORT
-                ).show();
             }
         });
     }
@@ -460,7 +393,7 @@ public class SettingsActivity extends AppCompatActivity {
             return fileUrl;
         }
 
-        String baseUrl = RetrofitClient.getInstance(this).baseUrl().toString();
+        String baseUrl = ((retrofit2.Retrofit) get(retrofit2.Retrofit.class)).baseUrl().toString();
 
         if (baseUrl.endsWith("/api/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 5);
@@ -639,22 +572,12 @@ public class SettingsActivity extends AppCompatActivity {
                 email
         );
 
-        userApi.updatePersonalData(request).enqueue(new retrofit2.Callback<AuthResponse>() {
+        userApi.updatePersonalData(request).enqueue(new ApiCallback<AuthResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull retrofit2.Call<AuthResponse> call,
-                    @NonNull retrofit2.Response<AuthResponse> response
-            ) {
+            protected void onSuccess(Response<AuthResponse> response) {
                 dialogBinding.progressPersonalData.setVisibility(android.view.View.GONE);
                 dialogBinding.buttonSavePersonalData.setEnabled(true);
                 dialogBinding.buttonCancelPersonalData.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    if (handleAuthError(errorMessage, null)) return;
-                    Toast.makeText(SettingsActivity.this, errorMessage, Toast.LENGTH_LONG).show();
-                    return;
-                }
 
                 AuthResponse authResponse = response.body();
 
@@ -680,22 +603,6 @@ public class SettingsActivity extends AppCompatActivity {
                 Toast.makeText(SettingsActivity.this, "Личные данные обновлены", Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
                 loadCurrentUserFromBackend();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull retrofit2.Call<AuthResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressPersonalData.setVisibility(android.view.View.GONE);
-                dialogBinding.buttonSavePersonalData.setEnabled(true);
-                dialogBinding.buttonCancelPersonalData.setEnabled(true);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }
@@ -763,25 +670,12 @@ public class SettingsActivity extends AppCompatActivity {
                 currentPassword
         );
 
-        authApi.requestEmailChange(request).enqueue(new retrofit2.Callback<MessageResponse>() {
+        authApi.requestEmailChange(request).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull retrofit2.Call<MessageResponse> call,
-                    @NonNull retrofit2.Response<MessageResponse> response
-            ) {
+            protected void onSuccess(Response<MessageResponse> response) {
                 dialogBinding.progressChangeEmail.setVisibility(View.GONE);
                 dialogBinding.buttonSendEmailCode.setEnabled(true);
                 dialogBinding.buttonConfirmEmailChange.setEnabled(true);
-
-                if (!response.isSuccessful()) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    DarkDialog.showMessage(
-                            SettingsActivity.this,
-                            "Ошибка смены почты",
-                            errorMessage
-                    );
-                    return;
-                }
 
                 MessageResponse body = response.body();
                 String devCode = body != null ? body.getDevCode() : null;
@@ -800,22 +694,6 @@ public class SettingsActivity extends AppCompatActivity {
                             Toast.LENGTH_SHORT
                     ).show();
                 }
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull retrofit2.Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressChangeEmail.setVisibility(View.GONE);
-                dialogBinding.buttonSendEmailCode.setEnabled(true);
-                dialogBinding.buttonConfirmEmailChange.setEnabled(true);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }
@@ -836,24 +714,12 @@ public class SettingsActivity extends AppCompatActivity {
         dialogBinding.buttonSendEmailCode.setEnabled(false);
         dialogBinding.buttonConfirmEmailChange.setEnabled(false);
 
-        authApi.checkEmail(newEmail).enqueue(new retrofit2.Callback<MessageResponse>() {
+        authApi.checkEmail(newEmail).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull retrofit2.Call<MessageResponse> call,
-                    @NonNull retrofit2.Response<MessageResponse> response
-            ) {
+            protected void onSuccess(Response<MessageResponse> response) {
                 dialogBinding.progressChangeEmail.setVisibility(View.GONE);
                 dialogBinding.buttonSendEmailCode.setEnabled(true);
                 dialogBinding.buttonConfirmEmailChange.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    Toast.makeText(
-                            SettingsActivity.this,
-                            BackendErrorParser.parse(response),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 String message = response.body().getMessage();
 
@@ -869,22 +735,6 @@ public class SettingsActivity extends AppCompatActivity {
 
                 requestEmailChangeCode(dialogBinding, newEmail, currentPassword);
             }
-
-            @Override
-            public void onFailure(
-                    @NonNull retrofit2.Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressChangeEmail.setVisibility(View.GONE);
-                dialogBinding.buttonSendEmailCode.setEnabled(true);
-                dialogBinding.buttonConfirmEmailChange.setEnabled(true);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
-            }
         });
     }
 
@@ -892,7 +742,7 @@ public class SettingsActivity extends AppCompatActivity {
             DialogChangeEmailBinding dialogBinding,
             String newEmail,
             String code,
-            com.google.android.material.bottomsheet.BottomSheetDialog dialog
+            BottomSheetDialog dialog
     ) {
         dialogBinding.progressChangeEmail.setVisibility(View.VISIBLE);
         dialogBinding.buttonSendEmailCode.setEnabled(false);
@@ -900,26 +750,12 @@ public class SettingsActivity extends AppCompatActivity {
 
         ConfirmEmailChangeRequest request = new ConfirmEmailChangeRequest(newEmail, code);
 
-        authApi.confirmEmailChange(request).enqueue(new retrofit2.Callback<AuthResponse>() {
+        authApi.confirmEmailChange(request).enqueue(new ApiCallback<AuthResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull retrofit2.Call<AuthResponse> call,
-                    @NonNull retrofit2.Response<AuthResponse> response
-            ) {
+            protected void onSuccess(Response<AuthResponse> response) {
                 dialogBinding.progressChangeEmail.setVisibility(View.GONE);
                 dialogBinding.buttonSendEmailCode.setEnabled(true);
                 dialogBinding.buttonConfirmEmailChange.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    DarkDialog.showMessage(
-                            SettingsActivity.this,
-                            "Ошибка смены почты",
-                            errorMessage
-                    );
-
-                    return;
-                }
 
                 AuthResponse authResponse = response.body();
 
@@ -939,22 +775,6 @@ public class SettingsActivity extends AppCompatActivity {
 
                 dialog.dismiss();
                 recreate();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull retrofit2.Call<AuthResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressChangeEmail.setVisibility(View.GONE);
-                dialogBinding.buttonSendEmailCode.setEnabled(true);
-                dialogBinding.buttonConfirmEmailChange.setEnabled(true);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }
@@ -1026,24 +846,12 @@ public class SettingsActivity extends AppCompatActivity {
 
         PasswordResetRequest request = new PasswordResetRequest(email);
 
-        authApi.requestPasswordReset(request).enqueue(new retrofit2.Callback<MessageResponse>() {
+        authApi.requestPasswordReset(request).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull retrofit2.Call<MessageResponse> call,
-                    @NonNull retrofit2.Response<MessageResponse> response
-            ) {
+            protected void onSuccess(Response<MessageResponse> response) {
                 dialogBinding.progressPasswordReset.setVisibility(View.GONE);
                 dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
                 dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                if (!response.isSuccessful()) {
-                    Toast.makeText(
-                            SettingsActivity.this,
-                            BackendErrorParser.parse(response),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 MessageResponse body = response.body();
                 String devCode = body != null ? body.getDevCode() : null;
@@ -1062,22 +870,6 @@ public class SettingsActivity extends AppCompatActivity {
                             Toast.LENGTH_SHORT
                     ).show();
                 }
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull retrofit2.Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressPasswordReset.setVisibility(View.GONE);
-                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
-                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }
@@ -1099,24 +891,12 @@ public class SettingsActivity extends AppCompatActivity {
                 newPassword
         );
 
-        authApi.confirmPasswordReset(request).enqueue(new retrofit2.Callback<AuthResponse>() {
+        authApi.confirmPasswordReset(request).enqueue(new ApiCallback<AuthResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull retrofit2.Call<AuthResponse> call,
-                    @NonNull retrofit2.Response<AuthResponse> response
-            ) {
+            protected void onSuccess(Response<AuthResponse> response) {
                 dialogBinding.progressPasswordReset.setVisibility(View.GONE);
                 dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
                 dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    Toast.makeText(
-                            SettingsActivity.this,
-                            BackendErrorParser.parse(response),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 AuthResponse authResponse = response.body();
 
@@ -1135,22 +915,6 @@ public class SettingsActivity extends AppCompatActivity {
                 ).show();
 
                 dialog.dismiss();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull retrofit2.Call<AuthResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressPasswordReset.setVisibility(View.GONE);
-                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
-                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                Toast.makeText(
-                        SettingsActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }

@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
@@ -16,13 +15,14 @@ import com.elvsf.dragondeal.dto.SupportTicketRequest;
 import com.elvsf.dragondeal.dto.SupportTicketResponse;
 import com.elvsf.dragondeal.storage.TokenStorage;
 import com.elvsf.dragondeal.ui.AuthGate;
-import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.util.ApiCallback;
 
-import java.io.IOException;
+import org.koin.java.KoinJavaComponent;
+
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
+import static org.koin.java.KoinJavaComponent.get;
+
 import retrofit2.Response;
 
 public class SupportActivity extends AppCompatActivity {
@@ -45,7 +45,7 @@ public class SupportActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
 
         tokenStorage = new TokenStorage(this);
-        supportApi = com.elvsf.dragondeal.api.RetrofitClient.getInstance(this).create(SupportApi.class);
+        supportApi = get(SupportApi.class);
 
         setupRecyclerView();
         setupClicks();
@@ -96,44 +96,17 @@ public class SupportActivity extends AppCompatActivity {
 
         SupportTicketRequest request = new SupportTicketRequest(subject, message);
 
-        supportApi.createSupportTicket(request).enqueue(new Callback<SupportTicketResponse>() {
+        supportApi.createSupportTicket(request).enqueue(new ApiCallback<SupportTicketResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<SupportTicketResponse> call,
-                    @NonNull Response<SupportTicketResponse> response
-            ) {
+            protected void onSuccess(Response<SupportTicketResponse> response) {
                 setSendLoading(false);
 
-                if (response.isSuccessful() && response.body() != null) {
-                    Toast.makeText(SupportActivity.this, "Обращение отправлено", Toast.LENGTH_SHORT).show();
+                Toast.makeText(SupportActivity.this, "Обращение отправлено", Toast.LENGTH_SHORT).show();
 
-                    binding.editTicketSubject.setText("");
-                    binding.editTicketMessage.setText("");
+                binding.editTicketSubject.setText("");
+                binding.editTicketMessage.setText("");
 
-                    loadMyTickets();
-                } else {
-                    String errorMessage = extractErrorMessage(response);
-                    DarkDialog.showMessage(SupportActivity.this, "Ошибка", errorMessage);
-                }
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<SupportTicketResponse> call, @NonNull Throwable t) {
-                setSendLoading(false);
-
-                if (t instanceof IOException) {
-                    DarkDialog.showMessage(
-                            SupportActivity.this,
-                            "Ошибка",
-                            "Нет соединения с сервером"
-                    );
-                } else {
-                    DarkDialog.showMessage(
-                            SupportActivity.this,
-                            "Ошибка",
-                            "Произошла ошибка: " + t.getMessage()
-                    );
-                }
+                loadMyTickets();
             }
         });
     }
@@ -142,32 +115,19 @@ public class SupportActivity extends AppCompatActivity {
         binding.progressTickets.setVisibility(View.VISIBLE);
         binding.textTicketsEmpty.setVisibility(View.GONE);
 
-        supportApi.getMySupportTickets().enqueue(new Callback<List<SupportTicketResponse>>() {
+        supportApi.getMySupportTickets().enqueue(new ApiCallback<List<SupportTicketResponse>>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<List<SupportTicketResponse>> call,
-                    @NonNull Response<List<SupportTicketResponse>> response
-            ) {
+            protected void onSuccess(Response<List<SupportTicketResponse>> response) {
                 binding.progressTickets.setVisibility(View.GONE);
 
-                if (response.isSuccessful() && response.body() != null) {
-                    List<SupportTicketResponse> tickets = response.body();
+                List<SupportTicketResponse> tickets = response.body();
 
-                    if (tickets.isEmpty()) {
-                        binding.textTicketsEmpty.setVisibility(View.VISIBLE);
-                    } else {
-                        binding.textTicketsEmpty.setVisibility(View.GONE);
-                        ticketAdapter.setTickets(tickets);
-                    }
-                } else {
+                if (tickets.isEmpty()) {
                     binding.textTicketsEmpty.setVisibility(View.VISIBLE);
+                } else {
+                    binding.textTicketsEmpty.setVisibility(View.GONE);
+                    ticketAdapter.setTickets(tickets);
                 }
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<List<SupportTicketResponse>> call, @NonNull Throwable t) {
-                binding.progressTickets.setVisibility(View.GONE);
-                binding.textTicketsEmpty.setVisibility(View.VISIBLE);
             }
         });
     }
@@ -175,36 +135,5 @@ public class SupportActivity extends AppCompatActivity {
     private void setSendLoading(boolean loading) {
         binding.buttonSendTicket.setEnabled(!loading);
         binding.buttonSendTicket.setAlpha(loading ? 0.5f : 1.0f);
-    }
-
-    private String extractErrorMessage(Response<?> response) {
-        if (response.code() == 401 || response.code() == 403) {
-            return "Войдите в аккаунт, чтобы обратиться в поддержку";
-        }
-
-        try {
-            if (response.errorBody() != null) {
-                String errorBody = response.errorBody().string();
-
-                if (errorBody.contains("\"message\"")) {
-                    int start = errorBody.indexOf("\"message\"");
-                    int colonIdx = errorBody.indexOf(":", start);
-
-                    if (colonIdx >= 0) {
-                        int valueStart = errorBody.indexOf("\"", colonIdx);
-                        int valueEnd = errorBody.indexOf("\"", valueStart + 1);
-
-                        if (valueStart >= 0 && valueEnd > valueStart) {
-                            return errorBody.substring(valueStart + 1, valueEnd);
-                        }
-                    }
-                }
-
-                return errorBody;
-            }
-        } catch (Exception ignored) {
-        }
-
-        return "Не удалось отправить обращение (ошибка " + response.code() + ")";
     }
 }

@@ -6,7 +6,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
@@ -16,7 +15,6 @@ import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.adapter.ListingAdapter;
 import com.elvsf.dragondeal.api.ListingApi;
 import com.elvsf.dragondeal.api.OrderApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivityListingDetailBinding;
 import com.elvsf.dragondeal.dto.CreateOrderRequest;
 import com.elvsf.dragondeal.dto.ListingResponse;
@@ -24,14 +22,16 @@ import com.elvsf.dragondeal.dto.OrderResponse;
 import com.elvsf.dragondeal.payment.PaymentDialogFragment;
 import com.elvsf.dragondeal.storage.TokenStorage;
 import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.util.ApiCallback;
 import com.elvsf.dragondeal.util.ImageUrlResolver;
+import com.elvsf.dragondeal.viewmodel.ListingDetailViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class ListingDetailActivity extends AppCompatActivity {
 
@@ -40,12 +40,11 @@ public class ListingDetailActivity extends AppCompatActivity {
     private ListingAdapter otherSellerListingsAdapter;
     private ActivityListingDetailBinding binding;
 
-    private ListingApi listingApi;
+    private ListingDetailViewModel viewModel;
     private OrderApi orderApi;
     private TokenStorage tokenStorage;
 
     private Long listingId;
-    private ListingResponse currentListing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,12 +53,13 @@ public class ListingDetailActivity extends AppCompatActivity {
         binding = ActivityListingDetailBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        listingApi = RetrofitClient.getInstance(this).create(ListingApi.class);
-        orderApi = RetrofitClient.getInstance(this).create(OrderApi.class);
+        viewModel = get(ListingDetailViewModel.class);
+        orderApi = get(OrderApi.class);
         tokenStorage = new TokenStorage(this);
 
         setupOtherSellerListings();
         setupClicks();
+        setupObservers();
 
         listingId = getIntent().getLongExtra("listingId", 0L);
 
@@ -70,6 +70,38 @@ public class ListingDetailActivity extends AppCompatActivity {
         }
 
         loadListing();
+    }
+
+    private void setupObservers() {
+        viewModel.getListing().observe(this, listing -> {
+            if (listing != null) {
+                renderListing(listing);
+            }
+        });
+
+        viewModel.getSellerListings().observe(this, listings -> {
+            otherSellerListings.clear();
+            if (listings != null) {
+                otherSellerListings.addAll(listings);
+            }
+            otherSellerListingsAdapter.notifyDataSetChanged();
+
+            if (otherSellerListings.isEmpty()) {
+                binding.textOtherSellerListingsTitle.setText("Других объявлений продавца пока нет");
+            } else {
+                binding.textOtherSellerListingsTitle.setText("Другие объявления продавца");
+            }
+        });
+
+        viewModel.getLoading().observe(this, loading -> {
+            setLoading(loading);
+        });
+
+        viewModel.getError().observe(this, error -> {
+            if (error != null) {
+                Toast.makeText(this, error, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void setupClicks() {
@@ -94,40 +126,8 @@ public class ListingDetailActivity extends AppCompatActivity {
     }
 
     private void loadListing() {
-        setLoading(true);
-
-        listingApi.findListingById(listingId).enqueue(new Callback<ListingResponse>() {
-            @Override
-            public void onResponse(Call<ListingResponse> call, Response<ListingResponse> response) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    Toast.makeText(
-                            ListingDetailActivity.this,
-                            "Не удалось загрузить объявление: " + response.code(),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    finish();
-                    return;
-                }
-
-                currentListing = response.body();
-                renderListing(currentListing);
-            }
-
-            @Override
-            public void onFailure(Call<ListingResponse> call, Throwable throwable) {
-                setLoading(false);
-
-                Toast.makeText(
-                        ListingDetailActivity.this,
-                        "Ошибка подключения: " + throwable.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
-
-                finish();
-            }
-        });
+        ListingApi api = get(ListingApi.class);
+        viewModel.loadListing(api, listingId);
     }
 
     private void renderListing(ListingResponse listing) {
@@ -175,7 +175,8 @@ public class ListingDetailActivity extends AppCompatActivity {
         loadListingImage(listing);
         loadSellerAvatar(listing);
 
-        loadOtherSellerListings(listing.getSellerId(), listing.getId());
+        ListingApi api = get(ListingApi.class);
+        viewModel.loadSellerListings(api, listing.getSellerId(), listing.getId());
 
         updateBuyButton(listing);
     }
@@ -210,47 +211,8 @@ public class ListingDetailActivity extends AppCompatActivity {
                 .into(binding.imageSellerAvatar);
     }
 
-    private void loadOtherSellerListings(Long sellerId, Long currentListingId) {
-        if (sellerId == null) {
-            binding.textOtherSellerListingsTitle.setText("Других объявлений продавца пока нет");
-            return;
-        }
-
-        listingApi.findListingsBySellerId(sellerId).enqueue(new Callback<List<ListingResponse>>() {
-            @Override
-            public void onResponse(Call<List<ListingResponse>> call, Response<List<ListingResponse>> response) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    binding.textOtherSellerListingsTitle.setText("Других объявлений продавца пока нет");
-                    return;
-                }
-
-                List<ListingResponse> result = response.body();
-
-                otherSellerListings.clear();
-
-                for (ListingResponse item : result) {
-                    if (item.getId() != null && !item.getId().equals(currentListingId)) {
-                        otherSellerListings.add(item);
-                    }
-                }
-
-                otherSellerListingsAdapter.notifyDataSetChanged();
-
-                if (otherSellerListings.isEmpty()) {
-                    binding.textOtherSellerListingsTitle.setText("Других объявлений продавца пока нет");
-                } else {
-                    binding.textOtherSellerListingsTitle.setText("Другие объявления продавца");
-                }
-            }
-
-            @Override
-            public void onFailure(Call<List<ListingResponse>> call, Throwable throwable) {
-                binding.textOtherSellerListingsTitle.setText("Других объявлений продавца пока нет");
-            }
-        });
-    }
-
     private void createOrderAndOpenPayment() {
+        ListingResponse currentListing = viewModel.getListing().getValue();
         if (currentListing == null || currentListing.getId() == null) {
             Toast.makeText(this, "Объявление ещё не загружено", Toast.LENGTH_SHORT).show();
             return;
@@ -266,45 +228,10 @@ public class ListingDetailActivity extends AppCompatActivity {
 
         CreateOrderRequest request = new CreateOrderRequest(currentListing.getId());
 
-        orderApi.createOrder(request).enqueue(new Callback<OrderResponse>() {
+        orderApi.createOrder(request).enqueue(new ApiCallback<OrderResponse>(this) {
             @Override
-            public void onResponse(Call<OrderResponse> call, Response<OrderResponse> response) {
+            protected void onSuccess(Response<OrderResponse> response) {
                 setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    String errorMessage = "Не удалось создать заказ: " + response.code();
-
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    if (isAuthError(errorMessage)) {
-                        handleExpiredSession();
-                        return;
-                    }
-
-                    if (errorMessage.contains("Seller cannot buy own listing")) {
-                        DarkDialog.showMessage(
-                                ListingDetailActivity.this,
-                                "Ошибка создания заказа",
-                                "Вы не можете купить собственное объявление"
-                        );
-                        return;
-                    }
-
-                    DarkDialog.showMessage(
-                            ListingDetailActivity.this,
-                            "Ошибка создания заказа",
-                            errorMessage
-                    );
-
-                    loadListing();
-                    return;
-                }
-
                 OrderResponse order = response.body();
 
                 if (order == null || order.getId() == null) {
@@ -320,46 +247,27 @@ public class ListingDetailActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(Call<OrderResponse> call, Throwable throwable) {
+            protected void showError(String message) {
                 setLoading(false);
 
-                Toast.makeText(
+                if (message.contains("Seller cannot buy own listing")) {
+                    DarkDialog.showMessage(
+                            ListingDetailActivity.this,
+                            "Ошибка создания заказа",
+                            "Вы не можете купить собственное объявление"
+                    );
+                    return;
+                }
+
+                DarkDialog.showMessage(
                         ListingDetailActivity.this,
-                        "Ошибка подключения: " + throwable.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
+                        "Ошибка создания заказа",
+                        message
+                );
+
+                loadListing();
             }
         });
-    }
-
-    private boolean isAuthError(String errorMessage) {
-        if (errorMessage == null) {
-            return false;
-        }
-
-        return errorMessage.contains("User not found")
-                || errorMessage.contains("Invalid or expired token")
-                || errorMessage.contains("Invalid token")
-                || errorMessage.contains("JWT")
-                || errorMessage.contains("Unauthorized");
-    }
-
-    private void handleExpiredSession() {
-        new TokenStorage(ListingDetailActivity.this).clear();
-
-        DarkDialog.showConfirm(
-                ListingDetailActivity.this,
-                "Сессия устарела",
-                "Нужно заново войти в аккаунт",
-                "Войти заново",
-                "Закрыть",
-                () -> {
-                    Intent intent = new Intent(ListingDetailActivity.this, SigninActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                    finish();
-                }
-        );
     }
 
     private void openPaymentDialog(OrderResponse order) {
@@ -454,6 +362,8 @@ public class ListingDetailActivity extends AppCompatActivity {
     private void setLoading(boolean loading) {
         binding.progressDetail.setVisibility(loading ? View.VISIBLE : View.GONE);
 
+        ListingResponse current = viewModel.getListing().getValue();
+
         if (loading) {
             binding.buttonBuy.setEnabled(false);
             binding.buttonBuy.setAlpha(0.7f);
@@ -461,8 +371,8 @@ public class ListingDetailActivity extends AppCompatActivity {
             return;
         }
 
-        if (currentListing != null) {
-            updateBuyButton(currentListing);
+        if (current != null) {
+            updateBuyButton(current);
         } else {
             binding.buttonBuy.setEnabled(false);
             binding.buttonBuy.setAlpha(0.5f);
@@ -471,21 +381,23 @@ public class ListingDetailActivity extends AppCompatActivity {
     }
 
     private void openSellerProfile() {
-        if (currentListing == null || currentListing.getSellerId() == null) {
+        ListingResponse current = viewModel.getListing().getValue();
+        if (current == null || current.getSellerId() == null) {
             return;
         }
 
         Intent intent = new Intent(ListingDetailActivity.this, SellerProfileActivity.class);
-        intent.putExtra("sellerId", currentListing.getSellerId());
+        intent.putExtra("sellerId", current.getSellerId());
         startActivity(intent);
     }
 
     private void showDeactivateConfirm() {
-        if (currentListing == null || currentListing.getId() == null) {
+        ListingResponse current = viewModel.getListing().getValue();
+        if (current == null || current.getId() == null) {
             return;
         }
 
-        if (!"ACTIVE".equals(currentListing.getStatus())) {
+        if (!"ACTIVE".equals(current.getStatus())) {
             Toast.makeText(this, "Снять можно только активное объявление", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -501,69 +413,13 @@ public class ListingDetailActivity extends AppCompatActivity {
     }
 
     private void deactivateListing() {
-        if (currentListing == null || currentListing.getId() == null) {
+        ListingResponse current = viewModel.getListing().getValue();
+        if (current == null || current.getId() == null) {
             return;
         }
 
-        setLoading(true);
-
-        listingApi.deactivateListing(currentListing.getId()).enqueue(new Callback<Void>() {
-            @Override
-            public void onResponse(@NonNull Call<Void> call, @NonNull Response<Void> response) {
-                setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    String errorMessage = "Не удалось снять объявление: " + response.code();
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    if (isAuthError(errorMessage)) {
-                        handleExpiredSession();
-                        return;
-                    }
-
-                    DarkDialog.showMessage(
-                            ListingDetailActivity.this,
-                            "Ошибка",
-                            "Не удалось снять объявление с публикации"
-                    );
-                    return;
-                }
-
-                Toast.makeText(
-                        ListingDetailActivity.this,
-                        "Объявление снято с публикации",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-                // Refresh the listing
-                loadListing();
-            }
-
-            @Override
-            public void onFailure(@NonNull Call<Void> call, @NonNull Throwable t) {
-                setLoading(false);
-
-                String msg = t.getMessage();
-                if (msg != null && (msg.contains("Unable to resolve host") || msg.contains("ECONNREFUSED"))) {
-                    Toast.makeText(
-                            ListingDetailActivity.this,
-                            "Нет соединения с сервером",
-                            Toast.LENGTH_SHORT
-                    ).show();
-                } else {
-                    Toast.makeText(
-                            ListingDetailActivity.this,
-                            "Ошибка сети: " + msg,
-                            Toast.LENGTH_SHORT
-                    ).show();
-                }
-            }
-        });
+        ListingApi api = get(ListingApi.class);
+        viewModel.deactivateListing(api, current.getId());
     }
 
     private int dp(int value) {

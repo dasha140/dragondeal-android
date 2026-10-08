@@ -10,13 +10,13 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.api.OrderApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivityPaymentBinding;
 import com.elvsf.dragondeal.dto.MarkOrderPaidRequest;
+import com.elvsf.dragondeal.util.ApiCallback;
 
-import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class PaymentActivity extends AppCompatActivity {
 
@@ -40,7 +40,7 @@ public class PaymentActivity extends AppCompatActivity {
         binding = ActivityPaymentBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        orderApi = RetrofitClient.getInstance(this).create(OrderApi.class);
+        orderApi = get(OrderApi.class);
 
         readIntent();
         setupUi();
@@ -116,19 +116,10 @@ public class PaymentActivity extends AppCompatActivity {
 
         MarkOrderPaidRequest request = new MarkOrderPaidRequest(txHash);
 
-        orderApi.markOrderAsPaid(orderId, request).enqueue(new Callback<Void>() {
+        orderApi.markOrderAsPaid(orderId, request).enqueue(new ApiCallback<Void>(this) {
             @Override
-            public void onResponse(Call<Void> call, Response<Void> response) {
+            protected void onSuccess(Response<Void> response) {
                 setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    Toast.makeText(
-                            PaymentActivity.this,
-                            "Ошибка оплаты: " + response.code(),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 Toast.makeText(
                         PaymentActivity.this,
@@ -140,14 +131,9 @@ public class PaymentActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(Call<Void> call, Throwable throwable) {
+            protected void showError(String message) {
                 setLoading(false);
-
-                Toast.makeText(
-                        PaymentActivity.this,
-                        "Ошибка подключения: " + throwable.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
+                super.showError(message);
             }
         });
     }

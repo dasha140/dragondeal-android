@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
@@ -14,12 +13,11 @@ import com.elvsf.dragondeal.api.chat.ChatRepository;
 import com.elvsf.dragondeal.api.chat.ChatResponse;
 import com.elvsf.dragondeal.databinding.ActivityChatBinding;
 import com.elvsf.dragondeal.storage.TokenStorage;
+import com.elvsf.dragondeal.viewmodel.ChatViewModel;
 
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
+import static org.koin.java.KoinJavaComponent.get;
 
 public class ChatActivity extends AppCompatActivity {
 
@@ -27,7 +25,7 @@ public class ChatActivity extends AppCompatActivity {
     public static final String EXTRA_CHAT_ID = "chat_id";
 
     private ActivityChatBinding binding;
-    private ChatRepository chatRepository;
+    private ChatViewModel viewModel;
     private MessageAdapter messageAdapter;
     private TokenStorage tokenStorage;
 
@@ -41,7 +39,7 @@ public class ChatActivity extends AppCompatActivity {
         binding = ActivityChatBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        chatRepository = new ChatRepository(this);
+        viewModel = get(ChatViewModel.class);
         tokenStorage = new TokenStorage(this);
 
         orderId = getIntent().getLongExtra(EXTRA_ORDER_ID, 0L);
@@ -49,6 +47,7 @@ public class ChatActivity extends AppCompatActivity {
 
         setupRecyclerView();
         setupClicks();
+        setupObservers();
 
         if (chatId != null && chatId > 0) {
             loadMessages(chatId);
@@ -58,6 +57,25 @@ public class ChatActivity extends AppCompatActivity {
             showToast("Чат не найден");
             finish();
         }
+    }
+
+    private void setupObservers() {
+        viewModel.getChat().observe(this, chat -> {
+            if (chat != null && chat.getId() != null) {
+                chatId = chat.getId();
+                loadMessages(chatId);
+                renderChatHeader(chat);
+            }
+        });
+
+        viewModel.getMessages().observe(this, messages -> {
+            messageAdapter.setMessages(messages);
+            scrollToBottom();
+            // Re-enable send button when new messages arrive (from send or load)
+            binding.buttonSendMessage.setEnabled(true);
+        });
+
+        viewModel.getLoading().observe(this, this::setLoading);
     }
 
     private void setupRecyclerView() {
@@ -76,75 +94,13 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void loadChatByOrder(Long orderId) {
-        setLoading(true);
-
-        chatRepository.findChatsByOrder(orderId).enqueue(new Callback<List<ChatResponse>>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<List<ChatResponse>> call,
-                    @NonNull Response<List<ChatResponse>> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    showToast("Не удалось загрузить чат: " + response.code());
-                    return;
-                }
-
-                List<ChatResponse> chats = response.body();
-
-                if (chats.isEmpty()) {
-                    showToast("Чат по заказу не найден");
-                    return;
-                }
-
-                ChatResponse chat = chats.get(0);
-                chatId = chat.getId();
-
-                renderChatHeader(chat);
-                loadMessages(chatId);
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<List<ChatResponse>> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-                showToast("Ошибка сети: " + t.getMessage());
-            }
-        });
+        ChatRepository repo = get(ChatRepository.class);
+        viewModel.loadChatByOrder(repo, orderId);
     }
 
     private void loadMessages(Long chatId) {
-        setLoading(true);
-
-        chatRepository.findMessagesByChat(chatId).enqueue(new Callback<List<ChatMessageResponse>>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<List<ChatMessageResponse>> call,
-                    @NonNull Response<List<ChatMessageResponse>> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    showToast("Не удалось загрузить сообщения: " + response.code());
-                    return;
-                }
-
-                messageAdapter.setMessages(response.body());
-                scrollToBottom();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<List<ChatMessageResponse>> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-                showToast("Ошибка сети: " + t.getMessage());
-            }
-        });
+        ChatRepository repo = get(ChatRepository.class);
+        viewModel.loadMessages(repo, chatId);
     }
 
     private void sendMessage() {
@@ -162,33 +118,8 @@ public class ChatActivity extends AppCompatActivity {
 
         binding.buttonSendMessage.setEnabled(false);
 
-        chatRepository.sendMessage(chatId, content).enqueue(new Callback<ChatMessageResponse>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<ChatMessageResponse> call,
-                    @NonNull Response<ChatMessageResponse> response
-            ) {
-                binding.buttonSendMessage.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    showToast("Не удалось отправить: " + response.code());
-                    return;
-                }
-
-                binding.editMessage.setText("");
-                messageAdapter.addMessage(response.body());
-                scrollToBottom();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<ChatMessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                binding.buttonSendMessage.setEnabled(true);
-                showToast("Ошибка сети: " + t.getMessage());
-            }
-        });
+        ChatRepository repo = get(ChatRepository.class);
+        viewModel.sendMessage(repo, chatId, content);
     }
 
     private void renderChatHeader(ChatResponse chat) {

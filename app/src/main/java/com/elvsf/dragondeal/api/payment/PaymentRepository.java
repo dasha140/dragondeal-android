@@ -1,20 +1,19 @@
 package com.elvsf.dragondeal.api.payment;
 
-import android.content.Context;
-
 import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.dto.OrderResponse;
 
 import java.util.List;
 
 import retrofit2.Call;
+import retrofit2.Retrofit;
 
 public class PaymentRepository {
 
     private final PaymentApi paymentApi;
 
-    public PaymentRepository(Context context) {
-        paymentApi = RetrofitClient.getInstance(context).create(PaymentApi.class);
+    public PaymentRepository(Retrofit retrofit) {
+        paymentApi = retrofit.create(PaymentApi.class);
     }
 
     public Call<List<PaymentMethodResponse>> getEnabledPaymentMethods() {

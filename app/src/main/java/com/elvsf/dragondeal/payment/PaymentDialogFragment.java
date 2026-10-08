@@ -29,12 +29,13 @@ import com.elvsf.dragondeal.adapter.PaymentMethodAdapter;
 import com.elvsf.dragondeal.api.payment.PaymentIntentResponse;
 import com.elvsf.dragondeal.api.payment.PaymentMethodResponse;
 import com.elvsf.dragondeal.api.payment.PaymentRepository;
+import com.elvsf.dragondeal.util.ApiCallback;
 
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class PaymentDialogFragment extends DialogFragment {
 
@@ -80,7 +81,7 @@ public class PaymentDialogFragment extends DialogFragment {
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
         readArguments();
 
-        paymentRepository = new PaymentRepository(requireContext());
+        paymentRepository = get(PaymentRepository.class);
 
         View view = LayoutInflater.from(requireContext())
                 .inflate(R.layout.dialog_payment, null);
@@ -179,19 +180,10 @@ public class PaymentDialogFragment extends DialogFragment {
     private void loadPaymentMethods() {
         setLoading(true);
 
-        paymentRepository.getEnabledPaymentMethods().enqueue(new Callback<List<PaymentMethodResponse>>() {
+        paymentRepository.getEnabledPaymentMethods().enqueue(new ApiCallback<List<PaymentMethodResponse>>(requireContext()) {
             @Override
-            public void onResponse(
-                    @NonNull Call<List<PaymentMethodResponse>> call,
-                    @NonNull Response<List<PaymentMethodResponse>> response
-            ) {
+            protected void onSuccess(Response<List<PaymentMethodResponse>> response) {
                 setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    String errorMsg = extractErrorMessage(response);
-                    showToast("Не удалось загрузить способы оплаты: " + errorMsg);
-                    return;
-                }
 
                 List<PaymentMethodResponse> methods = response.body();
                 if (methods == null) {
@@ -208,12 +200,9 @@ public class PaymentDialogFragment extends DialogFragment {
             }
 
             @Override
-            public void onFailure(
-                    @NonNull Call<List<PaymentMethodResponse>> call,
-                    @NonNull Throwable t
-            ) {
+            protected void showError(String message) {
                 setLoading(false);
-                showToast("Нет подключения к серверу. Проверьте интернет и запущен ли backend.");
+                super.showError(message);
             }
         });
     }
@@ -229,19 +218,10 @@ public class PaymentDialogFragment extends DialogFragment {
         setLoading(true);
 
         paymentRepository.createPaymentIntent(orderId, selectedPaymentMethod.getId())
-                .enqueue(new Callback<PaymentIntentResponse>() {
+                .enqueue(new ApiCallback<PaymentIntentResponse>(requireContext()) {
                     @Override
-                    public void onResponse(
-                            @NonNull Call<PaymentIntentResponse> call,
-                            @NonNull Response<PaymentIntentResponse> response
-                    ) {
+                    protected void onSuccess(Response<PaymentIntentResponse> response) {
                         setLoading(false);
-
-                        if (!response.isSuccessful()) {
-                            String errorMsg = extractErrorMessage(response);
-                            showToast("Не удалось создать оплату: " + errorMsg);
-                            return;
-                        }
 
                         PaymentIntentResponse body = response.body();
                         if (body == null) {
@@ -255,12 +235,9 @@ public class PaymentDialogFragment extends DialogFragment {
                     }
 
                     @Override
-                    public void onFailure(
-                            @NonNull Call<PaymentIntentResponse> call,
-                            @NonNull Throwable t
-                    ) {
+                    protected void showError(String message) {
                         setLoading(false);
-                        showToast("Нет подключения к серверу. Проверь интернет.");
+                        super.showError(message);
                     }
                 });
     }
@@ -295,19 +272,10 @@ public class PaymentDialogFragment extends DialogFragment {
                 currentPaymentIntent.getId(),
                 escrowDealId,
                 paymentTxHash
-        ).enqueue(new Callback<PaymentIntentResponse>() {
+        ).enqueue(new ApiCallback<PaymentIntentResponse>(requireContext()) {
             @Override
-            public void onResponse(
-                    @NonNull Call<PaymentIntentResponse> call,
-                    @NonNull Response<PaymentIntentResponse> response
-            ) {
+            protected void onSuccess(Response<PaymentIntentResponse> response) {
                 setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    String errorMsg = extractErrorMessage(response);
-                    showToast("Не удалось сохранить tx: " + errorMsg);
-                    return;
-                }
 
                 PaymentIntentResponse body = response.body();
                 if (body == null) {
@@ -321,12 +289,9 @@ public class PaymentDialogFragment extends DialogFragment {
             }
 
             @Override
-            public void onFailure(
-                    @NonNull Call<PaymentIntentResponse> call,
-                    @NonNull Throwable t
-            ) {
+            protected void showError(String message) {
                 setLoading(false);
-                showToast("Нет подключения к серверу. Проверь интернет.");
+                super.showError(message);
             }
         });
     }
@@ -345,19 +310,10 @@ public class PaymentDialogFragment extends DialogFragment {
         setLoading(true);
 
         paymentRepository.verifyPayment(currentPaymentIntent.getId())
-                .enqueue(new Callback<PaymentIntentResponse>() {
+                .enqueue(new ApiCallback<PaymentIntentResponse>(requireContext()) {
                     @Override
-                    public void onResponse(
-                            @NonNull Call<PaymentIntentResponse> call,
-                            @NonNull Response<PaymentIntentResponse> response
-                    ) {
+                    protected void onSuccess(Response<PaymentIntentResponse> response) {
                         setLoading(false);
-
-                        if (!response.isSuccessful()) {
-                            String errorMsg = extractErrorMessage(response);
-                            showToast("Оплата не подтверждена: " + errorMsg);
-                            return;
-                        }
 
                         PaymentIntentResponse body = response.body();
                         if (body == null) {
@@ -376,20 +332,9 @@ public class PaymentDialogFragment extends DialogFragment {
                     }
 
                     @Override
-                    public void onFailure(
-                            @NonNull Call<PaymentIntentResponse> call,
-                            @NonNull Throwable t
-                    ) {
+                    protected void showError(String message) {
                         setLoading(false);
-
-                        String userMsg;
-                        String msg = t.getMessage();
-                        if (msg != null && (msg.contains("Connect") || msg.contains("connect") || msg.contains("failed to connect"))) {
-                            userMsg = "Локальный escrow недоступен. Запустите Hardhat node и backend.";
-                        } else {
-                            userMsg = "Ошибка сети: " + (msg != null ? msg : "неизвестная");
-                        }
-                        showToast(userMsg);
+                        super.showError(message);
                     }
                 });
     }
@@ -398,30 +343,17 @@ public class PaymentDialogFragment extends DialogFragment {
         setLoading(true);
 
         paymentRepository.markSellerDone(orderId)
-                .enqueue(new Callback<Void>() {
+                .enqueue(new ApiCallback<Void>(requireContext()) {
                     @Override
-                    public void onResponse(
-                            @NonNull Call<Void> call,
-                            @NonNull Response<Void> response
-                    ) {
+                    protected void onSuccess(Response<Void> response) {
                         setLoading(false);
-
-                        if (!response.isSuccessful()) {
-                            String errorMsg = extractErrorMessage(response);
-                            showToast("Не удалось отметить выполнение: " + errorMsg);
-                            return;
-                        }
-
                         showToast("Продавец отметил выполнение");
                     }
 
                     @Override
-                    public void onFailure(
-                            @NonNull Call<Void> call,
-                            @NonNull Throwable t
-                    ) {
+                    protected void showError(String message) {
                         setLoading(false);
-                        showToast("Нет подключения к серверу. Проверь интернет.");
+                        super.showError(message);
                     }
                 });
     }
@@ -437,31 +369,18 @@ public class PaymentDialogFragment extends DialogFragment {
         setLoading(true);
 
         paymentRepository.completeOrder(orderId, releaseTxHash)
-                .enqueue(new Callback<Void>() {
+                .enqueue(new ApiCallback<Void>(requireContext()) {
                     @Override
-                    public void onResponse(
-                            @NonNull Call<Void> call,
-                            @NonNull Response<Void> response
-                    ) {
+                    protected void onSuccess(Response<Void> response) {
                         setLoading(false);
-
-                        if (!response.isSuccessful()) {
-                            String errorMsg = extractErrorMessage(response);
-                            showToast("Не удалось завершить заказ: " + errorMsg);
-                            return;
-                        }
-
                         showToast("Заказ завершён");
                         dismiss();
                     }
 
                     @Override
-                    public void onFailure(
-                            @NonNull Call<Void> call,
-                            @NonNull Throwable t
-                    ) {
+                    protected void showError(String message) {
                         setLoading(false);
-                        showToast("Нет подключения к серверу. Проверь интернет.");
+                        super.showError(message);
                     }
                 });
     }
@@ -485,20 +404,6 @@ public class PaymentDialogFragment extends DialogFragment {
 
     private void showToast(String message) {
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
-    }
-
-    /** Extract human-readable error message from Retrofit response. */
-    private String extractErrorMessage(Response<?> response) {
-        int code = response.code();
-        switch (code) {
-            case 400: return "Неверные данные запроса";
-            case 401: return "Не авторизован";
-            case 403: return "Нет доступа";
-            case 404: return "Не найдено";
-            case 500: return "Ошибка сервера";
-            case 503: return "Сервер недоступен";
-            default: return "Код " + code;
-        }
     }
 
     private static String formatNetwork(String network) {

@@ -1,7 +1,5 @@
 package com.elvsf.dragondeal.api;
 
-import android.content.Context;
-
 import com.elvsf.dragondeal.api.payment.OrderCompleteRequest;
 import com.elvsf.dragondeal.dto.CreateOrderRequest;
 import com.elvsf.dragondeal.dto.MarkOrderPaidRequest;
@@ -10,13 +8,14 @@ import com.elvsf.dragondeal.dto.OrderResponse;
 import java.util.List;
 
 import retrofit2.Call;
+import retrofit2.Retrofit;
 
 public class OrderRepository {
 
     private final OrderApi orderApi;
 
-    public OrderRepository(Context context) {
-        orderApi = RetrofitClient.getInstance(context).create(OrderApi.class);
+    public OrderRepository(Retrofit retrofit) {
+        orderApi = retrofit.create(OrderApi.class);
     }
 
     public Call<List<OrderResponse>> findMyBuyerOrders() {

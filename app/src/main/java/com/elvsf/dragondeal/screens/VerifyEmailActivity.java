@@ -4,21 +4,21 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.api.AuthApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivityVerifyEmailBinding;
 import com.elvsf.dragondeal.dto.AuthResponse;
 import com.elvsf.dragondeal.dto.MessageResponse;
 import com.elvsf.dragondeal.dto.RegisterConfirmRequest;
 import com.elvsf.dragondeal.dto.RegisterRequest;
 import com.elvsf.dragondeal.storage.TokenStorage;
-import com.elvsf.dragondeal.util.BackendErrorParser;
+import com.elvsf.dragondeal.util.ApiCallback;
 
-import retrofit2.Call;
-import retrofit2.Callback;
+import org.koin.java.KoinJavaComponent;
+
+import static org.koin.java.KoinJavaComponent.get;
+
 import retrofit2.Response;
 
 public class VerifyEmailActivity extends AppCompatActivity {
@@ -43,7 +43,7 @@ public class VerifyEmailActivity extends AppCompatActivity {
         binding = ActivityVerifyEmailBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        authApi = RetrofitClient.getInstance(this).create(AuthApi.class);
+        authApi = get(AuthApi.class);
         tokenStorage = new TokenStorage(this);
 
         readIntentData();
@@ -94,19 +94,10 @@ public class VerifyEmailActivity extends AppCompatActivity {
 
         RegisterConfirmRequest request = new RegisterConfirmRequest(email, code);
 
-        authApi.registerConfirm(request).enqueue(new Callback<AuthResponse>() {
+        authApi.registerConfirm(request).enqueue(new ApiCallback<AuthResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<AuthResponse> call,
-                    @NonNull Response<AuthResponse> response
-            ) {
+            protected void onSuccess(Response<AuthResponse> response) {
                 setLoading(false, "Я подтвердил email");
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    showToast(errorMessage);
-                    return;
-                }
 
                 AuthResponse authResponse = response.body();
 
@@ -126,15 +117,6 @@ public class VerifyEmailActivity extends AppCompatActivity {
                 showToast("Email подтверждён, аккаунт создан");
                 openMainScreen();
             }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<AuthResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false, "Я подтвердил email");
-                showToast(BackendErrorParser.parse(t));
-            }
         });
     }
 
@@ -148,19 +130,10 @@ public class VerifyEmailActivity extends AppCompatActivity {
 
         RegisterRequest request = new RegisterRequest(username, email, password);
 
-        authApi.registerRequest(request).enqueue(new Callback<MessageResponse>() {
+        authApi.registerRequest(request).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Response<MessageResponse> response
-            ) {
+            protected void onSuccess(Response<MessageResponse> response) {
                 binding.buttonResendEmail.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    showToast(errorMessage);
-                    return;
-                }
 
                 MessageResponse body = response.body();
                 String newDevCode = body.getDevCode();
@@ -179,15 +152,6 @@ public class VerifyEmailActivity extends AppCompatActivity {
                             Toast.LENGTH_SHORT
                     ).show();
                 }
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                binding.buttonResendEmail.setEnabled(true);
-                showToast(BackendErrorParser.parse(t));
             }
         });
     }

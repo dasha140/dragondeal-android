@@ -16,11 +16,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.api.OrderRepository;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.api.ReviewApi;
 import com.elvsf.dragondeal.databinding.ActivityOrderDetailBinding;
 import com.elvsf.dragondeal.dto.CreateReviewRequest;
@@ -34,23 +32,24 @@ import com.elvsf.dragondeal.api.DisputeApi;
 import com.elvsf.dragondeal.databinding.DialogCreateDisputeBinding;
 import com.elvsf.dragondeal.dto.CreateDisputeRequest;
 import com.elvsf.dragondeal.dto.DisputeResponse;
+import com.elvsf.dragondeal.util.ApiCallback;
+import com.elvsf.dragondeal.viewmodel.OrderDetailViewModel;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import retrofit2.Call;
-import retrofit2.Callback;
 import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class OrderDetailActivity extends AppCompatActivity {
 
     public static final String EXTRA_ORDER_ID = "order_id";
 
     private ActivityOrderDetailBinding binding;
-    private OrderRepository orderRepository;
+    private OrderDetailViewModel viewModel;
     private ReviewApi reviewApi;
+    private DisputeApi disputeApi;
     private TokenStorage tokenStorage;
 
-    private DisputeApi disputeApi;
     private Long orderId;
-    private OrderResponse currentOrder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,9 +58,9 @@ public class OrderDetailActivity extends AppCompatActivity {
         binding = ActivityOrderDetailBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        orderRepository = new OrderRepository(this);
-        reviewApi = RetrofitClient.getInstance(this).create(ReviewApi.class);
-        disputeApi = RetrofitClient.getInstance(this).create(DisputeApi.class);
+        viewModel = get(OrderDetailViewModel.class);
+        reviewApi = get(ReviewApi.class);
+        disputeApi = get(DisputeApi.class);
         tokenStorage = new TokenStorage(this);
 
         orderId = getIntent().getLongExtra(EXTRA_ORDER_ID, 0L);
@@ -73,6 +72,7 @@ public class OrderDetailActivity extends AppCompatActivity {
         }
 
         setupClicks();
+        setupObservers();
         loadOrder();
     }
 
@@ -83,6 +83,18 @@ public class OrderDetailActivity extends AppCompatActivity {
         if (orderId != null && orderId > 0) {
             loadOrder();
         }
+    }
+
+    private void setupObservers() {
+        viewModel.getOrder().observe(this, this::renderOrder);
+
+        viewModel.getLoading().observe(this, this::setLoading);
+
+        viewModel.getError().observe(this, error -> {
+            if (error != null) {
+                Toast.makeText(this, error, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void setupClicks() {
@@ -97,46 +109,15 @@ public class OrderDetailActivity extends AppCompatActivity {
     }
 
     private void loadOrder() {
-        setLoading(true);
-
-        orderRepository.findOrderById(orderId).enqueue(new Callback<OrderResponse>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<OrderResponse> call,
-                    @NonNull Response<OrderResponse> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    Toast.makeText(
-                            OrderDetailActivity.this,
-                            "Не удалось загрузить заказ: " + response.code(),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
-
-                currentOrder = response.body();
-                renderOrder(currentOrder);
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<OrderResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-
-                Toast.makeText(
-                        OrderDetailActivity.this,
-                        "Ошибка сети: " + t.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
-            }
-        });
+        OrderRepository repo = get(OrderRepository.class);
+        viewModel.loadOrder(repo, orderId);
     }
 
     private void renderOrder(OrderResponse order) {
+        if (order == null) {
+            return;
+        }
+
         binding.textOrderDetailTitle.setText("Заказ #" + order.getId());
         binding.textOrderDetailListing.setText(safe(order.getListingTitle(), "Без названия"));
 
@@ -297,17 +278,18 @@ public class OrderDetailActivity extends AppCompatActivity {
     }
 
     private void showReviewDialog() {
-        if (currentOrder == null || currentOrder.getId() == null) {
+        OrderResponse order = viewModel.getOrder().getValue();
+        if (order == null || order.getId() == null) {
             Toast.makeText(this, "Заказ ещё не загружен", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (!"COMPLETED".equals(currentOrder.getStatus())) {
+        if (!"COMPLETED".equals(order.getStatus())) {
             Toast.makeText(this, "Оценить можно только завершённый заказ", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (!isCurrentUser(currentOrder.getBuyerId())) {
+        if (!isCurrentUser(order.getBuyerId())) {
             Toast.makeText(this, "Оценить продавца может только покупатель", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -327,7 +309,7 @@ public class OrderDetailActivity extends AppCompatActivity {
         title.setTypeface(null, Typeface.BOLD);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Продавец: " + safe(currentOrder.getSellerUsername(), "seller"));
+        subtitle.setText("Продавец: " + safe(order.getSellerUsername(), "seller"));
         subtitle.setTextColor(Color.parseColor("#9E9E9E"));
         subtitle.setTextSize(15);
         subtitle.setPadding(0, dp(8), 0, dp(14));
@@ -426,58 +408,37 @@ public class OrderDetailActivity extends AppCompatActivity {
     }
 
     private void sendReview(Dialog dialog, int rating, String comment) {
+        OrderResponse order = viewModel.getOrder().getValue();
+        if (order == null) {
+            return;
+        }
+
         CreateReviewRequest request = new CreateReviewRequest(
-                currentOrder.getId(),
+                order.getId(),
                 rating,
                 comment
         );
 
-        reviewApi.createReview(request).enqueue(new Callback<ReviewResponse>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<ReviewResponse> call,
-                    @NonNull Response<ReviewResponse> response
-            ) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = "Не удалось отправить оценку: " + response.code();
+        ReviewApi api = get(ReviewApi.class);
+        viewModel.createReview(api, request);
 
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    DarkDialog.showMessage(
+        // Observe the result for success feedback
+        viewModel.getLoading().observe(this, loading -> {
+            if (!loading) {
+                String error = viewModel.getError().getValue();
+                if (error == null) {
+                    // Success
+                    Toast.makeText(
                             OrderDetailActivity.this,
-                            "Ошибка оценки",
-                            errorMessage
-                    );
-                    return;
+                            "Спасибо за отзыв",
+                            Toast.LENGTH_SHORT
+                    ).show();
+
+                    binding.buttonReviewSeller.setText("Отзыв отправлен");
+                    binding.buttonReviewSeller.setEnabled(false);
+
+                    dialog.dismiss();
                 }
-
-                Toast.makeText(
-                        OrderDetailActivity.this,
-                        "Спасибо за отзыв",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-                binding.buttonReviewSeller.setText("Отзыв отправлен");
-                binding.buttonReviewSeller.setEnabled(false);
-
-                dialog.dismiss();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<ReviewResponse> call,
-                    @NonNull Throwable t
-            ) {
-                Toast.makeText(
-                        OrderDetailActivity.this,
-                        "Ошибка сети: " + t.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }
@@ -497,37 +458,38 @@ public class OrderDetailActivity extends AppCompatActivity {
     }
 
     private void openPayment() {
+        OrderResponse order = viewModel.getOrder().getValue();
         if (!AuthGate.requireAuth(this, "Войдите, чтобы оплатить заказ.")) {
             return;
         }
 
-        if (currentOrder == null || currentOrder.getId() == null) {
+        if (order == null || order.getId() == null) {
             Toast.makeText(this, "Заказ ещё не загружен", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (!isCurrentUser(currentOrder.getBuyerId())) {
+        if (!isCurrentUser(order.getBuyerId())) {
             Toast.makeText(this, "Оплата доступна только покупателю", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if ("COMPLETED".equals(currentOrder.getStatus())) {
+        if ("COMPLETED".equals(order.getStatus())) {
             Toast.makeText(this, "Заказ уже завершён", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        String title = safe(currentOrder.getListingTitle(), "Заказ #" + currentOrder.getId());
+        String title = safe(order.getListingTitle(), "Заказ #" + order.getId());
 
         String totalPrice = "0";
 
-        if (currentOrder.getTotalPrice() != null) {
-            totalPrice = currentOrder.getTotalPrice().toString();
+        if (order.getTotalPrice() != null) {
+            totalPrice = order.getTotalPrice().toString();
         }
 
-        String currency = safe(currentOrder.getCurrency(), "USDT");
+        String currency = safe(order.getCurrency(), "USDT");
 
         PaymentDialogFragment dialog = PaymentDialogFragment.newInstance(
-                currentOrder.getId(),
+                order.getId(),
                 title,
                 totalPrice + " " + currency
         );
@@ -536,78 +498,40 @@ public class OrderDetailActivity extends AppCompatActivity {
     }
 
     private void openChat() {
+        OrderResponse order = viewModel.getOrder().getValue();
         if (!AuthGate.requireAuth(this, "Войдите, чтобы открыть чат.")) {
             return;
         }
 
-        if (currentOrder == null || currentOrder.getId() == null) {
+        if (order == null || order.getId() == null) {
             Toast.makeText(this, "Заказ ещё не загружен", Toast.LENGTH_SHORT).show();
             return;
         }
 
         Intent intent = new Intent(this, ChatActivity.class);
-        intent.putExtra(ChatActivity.EXTRA_ORDER_ID, currentOrder.getId());
+        intent.putExtra(ChatActivity.EXTRA_ORDER_ID, order.getId());
         startActivity(intent);
     }
 
     private void markSellerDone() {
-        if (currentOrder == null || currentOrder.getId() == null) {
+        OrderResponse order = viewModel.getOrder().getValue();
+        if (order == null || order.getId() == null) {
             Toast.makeText(this, "Заказ ещё не загружен", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (!isCurrentUser(currentOrder.getSellerId())) {
+        if (!isCurrentUser(order.getSellerId())) {
             Toast.makeText(this, "Это действие доступно только продавцу", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (!"PAID".equals(currentOrder.getStatus())) {
+        if (!"PAID".equals(order.getStatus())) {
             Toast.makeText(this, "Отметить выполнение можно только после оплаты", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        setLoading(true);
-
-        orderRepository.markSellerDone(currentOrder.getId()).enqueue(new Callback<Void>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<Void> call,
-                    @NonNull Response<Void> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    Toast.makeText(
-                            OrderDetailActivity.this,
-                            "Не удалось отметить выполнение: " + response.code(),
-                            Toast.LENGTH_SHORT
-                    ).show();
-                    return;
-                }
-
-                Toast.makeText(
-                        OrderDetailActivity.this,
-                        "Вы отметили заказ как выполненный",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-                loadOrder();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<Void> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-
-                Toast.makeText(
-                        OrderDetailActivity.this,
-                        "Ошибка сети: " + t.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
-            }
-        });
+        OrderRepository repo = get(OrderRepository.class);
+        viewModel.markSellerDone(repo, order.getId());
     }
 
     private boolean isCurrentUser(Long userId) {
@@ -654,26 +578,27 @@ public class OrderDetailActivity extends AppCompatActivity {
     }
 
     private void showCreateDisputeDialog() {
+        OrderResponse order = viewModel.getOrder().getValue();
         if (!AuthGate.requireAuth(this, "Войдите, чтобы открыть спор.")) {
             return;
         }
 
-        if (currentOrder == null || currentOrder.getId() == null) {
+        if (order == null || order.getId() == null) {
             Toast.makeText(this, "Заказ ещё не загружен", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (!isCurrentUser(currentOrder.getBuyerId()) && !isCurrentUser(currentOrder.getSellerId())) {
+        if (!isCurrentUser(order.getBuyerId()) && !isCurrentUser(order.getSellerId())) {
             Toast.makeText(this, "Спор могут открыть только участники заказа", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if ("COMPLETED".equals(currentOrder.getStatus())) {
+        if ("COMPLETED".equals(order.getStatus())) {
             Toast.makeText(this, "Нельзя открыть спор по завершённому заказу", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if ("DISPUTED".equals(currentOrder.getStatus())) {
+        if ("DISPUTED".equals(order.getStatus())) {
             Toast.makeText(this, "Спор уже открыт", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -710,42 +635,26 @@ public class OrderDetailActivity extends AppCompatActivity {
             DialogCreateDisputeBinding dialogBinding,
             String reason
     ) {
+        OrderResponse order = viewModel.getOrder().getValue();
+        if (order == null) {
+            return;
+        }
+
         dialogBinding.progressCreateDispute.setVisibility(View.VISIBLE);
         dialogBinding.buttonConfirmCreateDispute.setEnabled(false);
         dialogBinding.buttonCancelCreateDispute.setEnabled(false);
 
         CreateDisputeRequest request = new CreateDisputeRequest(
-                currentOrder.getId(),
+                order.getId(),
                 reason
         );
 
-        disputeApi.createDispute(request).enqueue(new Callback<DisputeResponse>() {
+        disputeApi.createDispute(request).enqueue(new ApiCallback<DisputeResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<DisputeResponse> call,
-                    @NonNull Response<DisputeResponse> response
-            ) {
+            protected void onSuccess(Response<DisputeResponse> response) {
                 dialogBinding.progressCreateDispute.setVisibility(View.GONE);
                 dialogBinding.buttonConfirmCreateDispute.setEnabled(true);
                 dialogBinding.buttonCancelCreateDispute.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = "Не удалось открыть спор: " + response.code();
-
-                    try {
-                        if (response.errorBody() != null) {
-                            errorMessage = response.errorBody().string();
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    DarkDialog.showMessage(
-                            OrderDetailActivity.this,
-                            "Ошибка спора",
-                            errorMessage
-                    );
-                    return;
-                }
 
                 Toast.makeText(
                         OrderDetailActivity.this,
@@ -758,19 +667,11 @@ public class OrderDetailActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(
-                    @NonNull Call<DisputeResponse> call,
-                    @NonNull Throwable t
-            ) {
+            protected void showError(String message) {
                 dialogBinding.progressCreateDispute.setVisibility(View.GONE);
                 dialogBinding.buttonConfirmCreateDispute.setEnabled(true);
                 dialogBinding.buttonCancelCreateDispute.setEnabled(true);
-
-                Toast.makeText(
-                        OrderDetailActivity.this,
-                        "Ошибка сети: " + t.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
+                super.showError(message);
             }
         });
     }

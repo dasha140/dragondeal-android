@@ -5,13 +5,11 @@ import android.os.Bundle;
 import android.text.method.PasswordTransformationMethod;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import com.elvsf.dragondeal.ui.DarkDialog;
 import com.elvsf.dragondeal.R;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.api.AuthApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivitySigninBinding;
 import com.elvsf.dragondeal.databinding.DialogPasswordResetBinding;
 import com.elvsf.dragondeal.dto.AuthResponse;
@@ -20,11 +18,13 @@ import com.elvsf.dragondeal.dto.MessageResponse;
 import com.elvsf.dragondeal.dto.PasswordResetConfirmRequest;
 import com.elvsf.dragondeal.dto.PasswordResetRequest;
 import com.elvsf.dragondeal.storage.TokenStorage;
-import com.elvsf.dragondeal.util.BackendErrorParser;
+import com.elvsf.dragondeal.util.ApiCallback;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
-import retrofit2.Call;
-import retrofit2.Callback;
+import org.koin.java.KoinJavaComponent;
+
+import static org.koin.java.KoinJavaComponent.get;
+
 import retrofit2.Response;
 
 public class SigninActivity extends AppCompatActivity {
@@ -40,7 +40,7 @@ public class SigninActivity extends AppCompatActivity {
         binding = ActivitySigninBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        authApi = RetrofitClient.getInstance(this).create(AuthApi.class);
+        authApi = get(AuthApi.class);
         tokenStorage = new TokenStorage(this);
 
         if (tokenStorage.isLoggedIn()) {
@@ -102,19 +102,10 @@ public class SigninActivity extends AppCompatActivity {
 
         LoginRequest request = new LoginRequest(email, password);
 
-        authApi.login(request).enqueue(new Callback<AuthResponse>() {
+        authApi.login(request).enqueue(new ApiCallback<AuthResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<AuthResponse> call,
-                    @NonNull Response<AuthResponse> response
-            ) {
+            protected void onSuccess(Response<AuthResponse> response) {
                 setLoading(false, "Войти");
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    String errorMessage = BackendErrorParser.parse(response);
-                    showErrorDialog("Ошибка входа", errorMessage);
-                    return;
-                }
 
                 AuthResponse authResponse = response.body();
 
@@ -133,15 +124,6 @@ public class SigninActivity extends AppCompatActivity {
 
                 showToast("Вход выполнен");
                 openMainScreen();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<AuthResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false, "Войти");
-                showToast(BackendErrorParser.parse(t));
             }
         });
     }
@@ -218,24 +200,12 @@ public class SigninActivity extends AppCompatActivity {
 
         PasswordResetRequest request = new PasswordResetRequest(email);
 
-        authApi.requestPasswordReset(request).enqueue(new Callback<MessageResponse>() {
+        authApi.requestPasswordReset(request).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Response<MessageResponse> response
-            ) {
+            protected void onSuccess(Response<MessageResponse> response) {
                 dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
                 dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
                 dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                if (!response.isSuccessful()) {
-                    Toast.makeText(
-                            SigninActivity.this,
-                            BackendErrorParser.parse(response),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 MessageResponse body = response.body();
                 String devCode = body != null ? body.getDevCode() : null;
@@ -254,22 +224,6 @@ public class SigninActivity extends AppCompatActivity {
                             Toast.LENGTH_SHORT
                     ).show();
                 }
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
-                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
-                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                Toast.makeText(
-                        SigninActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }
@@ -291,24 +245,12 @@ public class SigninActivity extends AppCompatActivity {
                 newPassword
         );
 
-        authApi.confirmPasswordReset(request).enqueue(new Callback<AuthResponse>() {
+        authApi.confirmPasswordReset(request).enqueue(new ApiCallback<AuthResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<AuthResponse> call,
-                    @NonNull Response<AuthResponse> response
-            ) {
+            protected void onSuccess(Response<AuthResponse> response) {
                 dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
                 dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
                 dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    Toast.makeText(
-                            SigninActivity.this,
-                            BackendErrorParser.parse(response),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
 
                 Toast.makeText(
                         SigninActivity.this,
@@ -317,22 +259,6 @@ public class SigninActivity extends AppCompatActivity {
                 ).show();
 
                 dialog.dismiss();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<AuthResponse> call,
-                    @NonNull Throwable t
-            ) {
-                dialogBinding.progressPasswordReset.setVisibility(android.view.View.GONE);
-                dialogBinding.buttonSendPasswordResetCode.setEnabled(true);
-                dialogBinding.buttonConfirmPasswordReset.setEnabled(true);
-
-                Toast.makeText(
-                        SigninActivity.this,
-                        BackendErrorParser.parse(t),
-                        Toast.LENGTH_LONG
-                ).show();
             }
         });
     }

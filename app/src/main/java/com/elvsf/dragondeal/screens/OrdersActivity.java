@@ -5,8 +5,8 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.elvsf.dragondeal.R;
@@ -14,18 +14,22 @@ import com.elvsf.dragondeal.adapter.OrderAdapter;
 import com.elvsf.dragondeal.api.OrderRepository;
 import com.elvsf.dragondeal.databinding.ActivityOrdersBinding;
 import com.elvsf.dragondeal.dto.OrderResponse;
+import com.elvsf.dragondeal.util.ApiCallback;
+import com.elvsf.dragondeal.viewmodel.OrdersViewModel;
 
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;import com.elvsf.dragondeal.ui.BottomNavHelper;
+import retrofit2.Response;
+import com.elvsf.dragondeal.ui.BottomNavHelper;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class OrdersActivity extends AppCompatActivity {
 
     private ActivityOrdersBinding binding;
     private OrderRepository orderRepository;
     private OrderAdapter orderAdapter;
+    private OrdersViewModel viewModel;
 
     private boolean showingBuyerOrders = true;
 
@@ -37,12 +41,35 @@ public class OrdersActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
         BottomNavHelper.setup(this, BottomNavHelper.Tab.ORDERS);
 
-        orderRepository = new OrderRepository(this);
+        viewModel = new ViewModelProvider(this).get(OrdersViewModel.class);
+        orderRepository = get(OrderRepository.class);
 
+        observeViewModel();
         setupRecyclerView();
         setupButtons();
 
-        loadBuyerOrders();
+        // Restore data after rotation if available
+        if (viewModel.getBuyerOrders().getValue() != null && showingBuyerOrders) {
+            renderOrders(viewModel.getBuyerOrders().getValue());
+        } else if (viewModel.getSellerOrders().getValue() != null) {
+            renderOrders(viewModel.getSellerOrders().getValue());
+        } else {
+            loadBuyerOrders();
+        }
+    }
+
+    private void observeViewModel() {
+        viewModel.getLoading().observe(this, this::setLoading);
+        viewModel.getBuyerOrders().observe(this, orders -> {
+            if (showingBuyerOrders) {
+                renderOrders(orders);
+            }
+        });
+        viewModel.getSellerOrders().observe(this, orders -> {
+            if (!showingBuyerOrders) {
+                renderOrders(orders);
+            }
+        });
     }
 
     private void setupRecyclerView() {
@@ -65,31 +92,14 @@ public class OrdersActivity extends AppCompatActivity {
     private void loadBuyerOrders() {
         showingBuyerOrders = true;
         updateTabs();
-        setLoading(true);
+        viewModel.setLoading(true);
 
-        orderRepository.findMyBuyerOrders().enqueue(new Callback<List<OrderResponse>>() {
+        orderRepository.findMyBuyerOrders().enqueue(new ApiCallback<List<OrderResponse>>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<List<OrderResponse>> call,
-                    @NonNull Response<List<OrderResponse>> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    showToast("Не удалось загрузить покупки: " + response.code());
-                    return;
-                }
-
+            protected void onSuccess(Response<List<OrderResponse>> response) {
+                viewModel.setLoading(false);
+                viewModel.setBuyerOrders(response.body());
                 renderOrders(response.body());
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<List<OrderResponse>> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-                showToast("Ошибка сети: " + t.getMessage());
             }
         });
     }
@@ -97,31 +107,14 @@ public class OrdersActivity extends AppCompatActivity {
     private void loadSellerOrders() {
         showingBuyerOrders = false;
         updateTabs();
-        setLoading(true);
+        viewModel.setLoading(true);
 
-        orderRepository.findMySellerOrders().enqueue(new Callback<List<OrderResponse>>() {
+        orderRepository.findMySellerOrders().enqueue(new ApiCallback<List<OrderResponse>>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<List<OrderResponse>> call,
-                    @NonNull Response<List<OrderResponse>> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    showToast("Не удалось загрузить продажи: " + response.code());
-                    return;
-                }
-
+            protected void onSuccess(Response<List<OrderResponse>> response) {
+                viewModel.setLoading(false);
+                viewModel.setSellerOrders(response.body());
                 renderOrders(response.body());
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<List<OrderResponse>> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-                showToast("Ошибка сети: " + t.getMessage());
             }
         });
     }

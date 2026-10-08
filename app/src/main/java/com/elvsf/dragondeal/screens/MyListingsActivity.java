@@ -5,33 +5,27 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-
-import com.elvsf.dragondeal.api.ListingApi;
-import com.elvsf.dragondeal.ui.DarkDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.elvsf.dragondeal.adapter.ListingAdapter;
-import com.elvsf.dragondeal.api.RetrofitClient;
+import com.elvsf.dragondeal.api.ListingApi;
 import com.elvsf.dragondeal.databinding.ActivityMyListingsBinding;
 import com.elvsf.dragondeal.dto.ListingResponse;
-import com.elvsf.dragondeal.storage.TokenStorage;
+import com.elvsf.dragondeal.ui.DarkDialog;
+import com.elvsf.dragondeal.viewmodel.MyListingsViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
+import static org.koin.java.KoinJavaComponent.get;
 
 public class MyListingsActivity extends AppCompatActivity {
 
-    private final List<ListingResponse> listings = new ArrayList<>();
-
     private ActivityMyListingsBinding binding;
-    private ListingApi listingApi;
+    private MyListingsViewModel viewModel;
     private ListingAdapter listingAdapter;
+    private final List<ListingResponse> listingList = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,10 +34,11 @@ public class MyListingsActivity extends AppCompatActivity {
         binding = ActivityMyListingsBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        listingApi = RetrofitClient.getInstance(this).create(ListingApi.class);
+        viewModel = get(MyListingsViewModel.class);
 
         setupRecyclerView();
         setupClicks();
+        setupObservers();
 
         loadMyListings();
     }
@@ -54,8 +49,24 @@ public class MyListingsActivity extends AppCompatActivity {
         loadMyListings();
     }
 
+    private void setupObservers() {
+        viewModel.getListings().observe(this, listings -> {
+            listingList.clear();
+            if (listings != null) {
+                listingList.addAll(listings);
+            }
+            listingAdapter.notifyDataSetChanged();
+
+            binding.textMyListingsEmpty.setVisibility(
+                    listingList.isEmpty() ? View.VISIBLE : View.GONE
+            );
+        });
+
+        viewModel.getLoading().observe(this, this::setLoading);
+    }
+
     private void setupRecyclerView() {
-        listingAdapter = new ListingAdapter(listings, this::showListingActions);
+        listingAdapter = new ListingAdapter(listingList, this::showListingActions);
 
         binding.recyclerMyListings.setLayoutManager(new LinearLayoutManager(this));
         binding.recyclerMyListings.setAdapter(listingAdapter);
@@ -71,91 +82,8 @@ public class MyListingsActivity extends AppCompatActivity {
     }
 
     private void loadMyListings() {
-        setLoading(true);
-
-        listingApi.findMyListings().enqueue(new Callback<List<ListingResponse>>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<List<ListingResponse>> call,
-                    @NonNull Response<List<ListingResponse>> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful() || response.body() == null) {
-                    handleLoadError(response);
-                    return;
-                }
-
-                listings.clear();
-                listings.addAll(response.body());
-                listingAdapter.notifyDataSetChanged();
-
-                binding.textMyListingsEmpty.setVisibility(
-                        listings.isEmpty() ? View.VISIBLE : View.GONE
-                );
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<List<ListingResponse>> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-                showToast("Ошибка сети: " + t.getMessage());
-            }
-        });
-    }
-
-    private void handleLoadError(Response<List<ListingResponse>> response) {
-        String errorMessage = "Не удалось загрузить объявления: " + response.code();
-
-        try {
-            if (response.errorBody() != null) {
-                errorMessage = response.errorBody().string();
-            }
-        } catch (Exception ignored) {
-        }
-
-        if (isAuthError(errorMessage)) {
-            handleExpiredSession();
-            return;
-        }
-
-        DarkDialog.showMessage(
-                MyListingsActivity.this,
-                "Ошибка загрузки",
-                errorMessage
-        );
-    }
-
-    private boolean isAuthError(String errorMessage) {
-        if (errorMessage == null) {
-            return false;
-        }
-
-        return errorMessage.contains("User not found")
-                || errorMessage.contains("Invalid or expired token")
-                || errorMessage.contains("Invalid token")
-                || errorMessage.contains("JWT")
-                || errorMessage.contains("Unauthorized");
-    }
-
-    private void handleExpiredSession() {
-        new TokenStorage(MyListingsActivity.this).clear();
-
-        DarkDialog.showConfirm(
-                MyListingsActivity.this,
-                "Сессия устарела",
-                "Нужно заново войти в аккаунт",
-                "Войти заново",
-                "Закрыть",
-                () -> {
-                    Intent intent = new Intent(MyListingsActivity.this, SigninActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                    finish();
-                }
-        );
+        ListingApi api = get(ListingApi.class);
+        viewModel.loadMyListings(api);
     }
 
     private void showListingActions(ListingResponse listing) {
@@ -171,42 +99,6 @@ public class MyListingsActivity extends AppCompatActivity {
         Intent intent = new Intent(this, ListingDetailActivity.class);
         intent.putExtra("listingId", listing.getId());
         startActivity(intent);
-    }
-
-    private void deactivateListing(ListingResponse listing) {
-        if (!"ACTIVE".equals(listing.getStatus())) {
-            showToast("Снять можно только ACTIVE объявление");
-            return;
-        }
-
-        setLoading(true);
-
-        listingApi.deactivateListing(listing.getId()).enqueue(new Callback<Void>() {
-            @Override
-            public void onResponse(
-                    @NonNull Call<Void> call,
-                    @NonNull Response<Void> response
-            ) {
-                setLoading(false);
-
-                if (!response.isSuccessful()) {
-                    showToast("Не удалось снять объявление: " + response.code());
-                    return;
-                }
-
-                showToast("Объявление снято");
-                loadMyListings();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<Void> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false);
-                showToast("Ошибка сети: " + t.getMessage());
-            }
-        });
     }
 
     private void setLoading(boolean loading) {

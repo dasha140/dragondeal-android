@@ -4,30 +4,34 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.adapter.ListingAdapter;
 import com.elvsf.dragondeal.adapter.TopMenuAdapter;
 import com.elvsf.dragondeal.api.ListingApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivityMainBinding;
 import com.elvsf.dragondeal.dto.ListingResponse;
 import com.elvsf.dragondeal.model.MenuItemModel;
+import com.elvsf.dragondeal.ui.BottomNavHelper;
+import com.elvsf.dragondeal.ui.AuthGate;
+import com.elvsf.dragondeal.util.ApiCallback;
+import com.elvsf.dragondeal.viewmodel.ListingsViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
-import retrofit2.Response;import com.elvsf.dragondeal.ui.BottomNavHelper;
-import com.elvsf.dragondeal.ui.AuthGate;
+import retrofit2.Response;
+
+import static org.koin.java.KoinJavaComponent.get;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -35,12 +39,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
 
-    private final List<ListingResponse> allListings = new ArrayList<>();
-
-    private String selectedCategory = "Все";
-    private String searchQuery = "";
-
-    private ListingApi listingApi;
+    private ListingsViewModel listingsViewModel;
 
     private ListingAdapter listingAdapter;
     private final List<ListingResponse> listingList = new ArrayList<>();
@@ -58,14 +57,34 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        listingApi = RetrofitClient.getInstance(this).create(ListingApi.class);
+        // ViewModel injection via Koin
+        listingsViewModel = get(ListingsViewModel.class);
 
         setupTopMenu();
         setupListings();
         setupSearch();
         setupAddListingButton();
+        setupObservers();
+        setupBottomNavigation();
+
         BottomNavHelper.setup(this, BottomNavHelper.Tab.HOME);
         loadListings();
+    }
+
+    private void setupObservers() {
+        listingsViewModel.getLoading().observe(this, loading -> {
+            // Optional: show/hide a global loading indicator
+        });
+
+        listingsViewModel.getListings().observe(this, filtered -> {
+            renderListings(filtered);
+        });
+
+        listingsViewModel.getError().observe(this, error -> {
+            if (error != null) {
+                Toast.makeText(this, error, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void setupTopMenu() {
@@ -83,8 +102,7 @@ public class MainActivity extends AppCompatActivity {
         topMenuAdapter = new TopMenuAdapter(
                 topMenuList,
                 item -> {
-                    selectedCategory = item.getTitle();
-                    applyFilters();
+                    listingsViewModel.setFilter(item.getTitle(), null);
                 }
         );
 
@@ -103,8 +121,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                searchQuery = s.toString().trim();
-                applyFilters();
+                listingsViewModel.setFilter(null, s.toString().trim());
             }
 
             @Override
@@ -121,10 +138,8 @@ public class MainActivity extends AppCompatActivity {
         });
 
         binding.navHome.setOnClickListener(view -> {
-            selectedCategory = "Все";
-            searchQuery = "";
+            listingsViewModel.setFilter("Все", "");
             binding.editSearchListings.setText("");
-            applyFilters();
         });
 
         binding.navSettings.setOnClickListener(view -> {
@@ -161,106 +176,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadListings() {
-        listingApi.findActiveListings().enqueue(new Callback<List<ListingResponse>>() {
-            @Override
-            public void onResponse(Call<List<ListingResponse>> call, Response<List<ListingResponse>> response) {
-                if (!response.isSuccessful()) {
-                    Toast.makeText(
-                            MainActivity.this,
-                            "Ошибка сервера: " + response.code(),
-                            Toast.LENGTH_LONG
-                    ).show();
-                    return;
-                }
-
-                List<ListingResponse> listings = response.body();
-
-                if (listings == null) {
-                    listings = new ArrayList<>();
-                }
-
-                allListings.clear();
-                allListings.addAll(listings);
-
-                applyFilters();
-            }
-
-            @Override
-            public void onFailure(Call<List<ListingResponse>> call, Throwable throwable) {
-                Log.e(TAG, "Failed to load listings", throwable);
-
-                Toast.makeText(
-                        MainActivity.this,
-                        "Не удалось загрузить объявления: " + throwable.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
-
-                allListings.clear();
-                applyFilters();
-            }
-        });
-    }
-
-    private void applyFilters() {
-        List<ListingResponse> filtered = new ArrayList<>();
-
-        String cleanQuery = searchQuery == null ? "" : searchQuery.trim().toLowerCase();
-        String cleanCategory = selectedCategory == null ? "Все" : selectedCategory.trim();
-
-        for (ListingResponse listing : allListings) {
-            if (listing == null) {
-                continue;
-            }
-
-            if (!matchesCategory(listing, cleanCategory)) {
-                continue;
-            }
-
-            if (!matchesSearch(listing, cleanQuery)) {
-                continue;
-            }
-
-            filtered.add(listing);
-        }
-
-        renderListings(filtered);
-    }
-
-    private boolean matchesCategory(ListingResponse listing, String category) {
-        if ("Все".equalsIgnoreCase(category)) {
-            return true;
-        }
-
-        String listingCategory = listing.getCategoryName();
-
-        if (listingCategory == null || listingCategory.trim().isEmpty()) {
-            return false;
-        }
-
-        return listingCategory.trim().equalsIgnoreCase(category);
-    }
-
-    private boolean matchesSearch(ListingResponse listing, String query) {
-        if (query == null || query.isEmpty()) {
-            return true;
-        }
-
-        return contains(listing.getTitle(), query)
-                || contains(listing.getDescription(), query)
-                || contains(listing.getGameName(), query)
-                || contains(listing.getCategoryName(), query)
-                || contains(listing.getSellerUsername(), query)
-                || contains(listing.getCurrency(), query)
-                || contains(listing.getNetwork(), query);
-    }
-
-    private boolean contains(String value, String query) {
-        return value != null && value.toLowerCase().contains(query);
+        ListingApi api = get(ListingApi.class);
+        listingsViewModel.loadListings(api);
     }
 
     private void renderListings(List<ListingResponse> listings) {
         listingList.clear();
-        listingList.addAll(listings);
+        if (listings != null) {
+            listingList.addAll(listings);
+        }
         listingAdapter.notifyDataSetChanged();
 
         boolean isEmpty = listingList.isEmpty();
@@ -268,6 +192,9 @@ public class MainActivity extends AppCompatActivity {
         binding.recyclerListings.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
 
         if (isEmpty) {
+            String searchQuery = listingsViewModel.getSearchQuery();
+            String selectedCategory = listingsViewModel.getSelectedCategory();
+
             if (searchQuery != null && !searchQuery.trim().isEmpty()) {
                 binding.textListingsEmpty.setText("Ничего не найдено");
             } else if (!"Все".equals(selectedCategory)) {

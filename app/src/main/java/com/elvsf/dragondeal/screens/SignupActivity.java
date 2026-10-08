@@ -5,19 +5,19 @@ import android.os.Bundle;
 import android.text.method.PasswordTransformationMethod;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.elvsf.dragondeal.R;
 import com.elvsf.dragondeal.api.AuthApi;
-import com.elvsf.dragondeal.api.RetrofitClient;
 import com.elvsf.dragondeal.databinding.ActivitySignupBinding;
 import com.elvsf.dragondeal.dto.MessageResponse;
 import com.elvsf.dragondeal.dto.RegisterRequest;
-import com.elvsf.dragondeal.util.BackendErrorParser;
+import com.elvsf.dragondeal.util.ApiCallback;
 
-import retrofit2.Call;
-import retrofit2.Callback;
+import org.koin.java.KoinJavaComponent;
+
+import static org.koin.java.KoinJavaComponent.get;
+
 import retrofit2.Response;
 
 public class SignupActivity extends AppCompatActivity {
@@ -34,7 +34,7 @@ public class SignupActivity extends AppCompatActivity {
         binding = ActivitySignupBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        authApi = RetrofitClient.getInstance(this).create(AuthApi.class);
+        authApi = get(AuthApi.class);
 
         setupClicks();
     }
@@ -100,18 +100,9 @@ public class SignupActivity extends AppCompatActivity {
         setLoading(true, "Проверяем...");
 
         // Step 1: check username availability
-        authApi.checkUsername(username).enqueue(new Callback<MessageResponse>() {
+        authApi.checkUsername(username).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Response<MessageResponse> response
-            ) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    setLoading(false, "Создать аккаунт");
-                    showToast("Не удалось проверить username");
-                    return;
-                }
-
+            protected void onSuccess(Response<MessageResponse> response) {
                 if ("TAKEN".equals(response.body().getMessage())) {
                     setLoading(false, "Создать аккаунт");
                     binding.etUsername.setError("Этот username уже занят");
@@ -122,31 +113,13 @@ public class SignupActivity extends AppCompatActivity {
                 // Step 2: check email availability
                 checkEmailAvailability(username, email, password);
             }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false, "Создать аккаунт");
-                showToast("Ошибка сети: " + t.getMessage());
-            }
         });
     }
 
     private void checkEmailAvailability(String username, String email, String password) {
-        authApi.checkEmail(email).enqueue(new Callback<MessageResponse>() {
+        authApi.checkEmail(email).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Response<MessageResponse> response
-            ) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    setLoading(false, "Создать аккаунт");
-                    showToast("Не удалось проверить email");
-                    return;
-                }
-
+            protected void onSuccess(Response<MessageResponse> response) {
                 if ("TAKEN".equals(response.body().getMessage())) {
                     setLoading(false, "Создать аккаунт");
                     binding.etRegisterEmail.setError("Этот email уже занят");
@@ -157,15 +130,6 @@ public class SignupActivity extends AppCompatActivity {
                 // Step 3: call register/request
                 sendRegisterRequest(username, email, password);
             }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false, "Создать аккаунт");
-                showToast("Ошибка сети: " + t.getMessage());
-            }
         });
     }
 
@@ -174,19 +138,9 @@ public class SignupActivity extends AppCompatActivity {
 
         RegisterRequest request = new RegisterRequest(username, email, password);
 
-        authApi.registerRequest(request).enqueue(new Callback<MessageResponse>() {
+        authApi.registerRequest(request).enqueue(new ApiCallback<MessageResponse>(this) {
             @Override
-            public void onResponse(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Response<MessageResponse> response
-            ) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    setLoading(false, "Создать аккаунт");
-                    String errorMessage = BackendErrorParser.parse(response);
-                    showToast(errorMessage);
-                    return;
-                }
-
+            protected void onSuccess(Response<MessageResponse> response) {
                 MessageResponse body = response.body();
                 String devCode = body.getDevCode();
 
@@ -200,15 +154,6 @@ public class SignupActivity extends AppCompatActivity {
                 }
                 startActivity(intent);
                 finish();
-            }
-
-            @Override
-            public void onFailure(
-                    @NonNull Call<MessageResponse> call,
-                    @NonNull Throwable t
-            ) {
-                setLoading(false, "Создать аккаунт");
-                showToast("Ошибка сети: " + t.getMessage());
             }
         });
     }
